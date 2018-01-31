@@ -25,7 +25,6 @@
 
 package me.lucko.luckperms.bukkit.model.permissible;
 
-import me.lucko.luckperms.bukkit.LPBukkitPlugin;
 import me.lucko.luckperms.bukkit.compat.ReflectionUtil;
 import me.lucko.luckperms.bukkit.model.dummy.DummyPermissibleBase;
 
@@ -35,9 +34,7 @@ import org.bukkit.permissions.PermissibleBase;
 import org.bukkit.permissions.PermissionAttachment;
 
 import java.lang.reflect.Field;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 /**
  * Injects a {@link LPPermissible} into a {@link Player}.
@@ -103,9 +100,23 @@ public final class PermissibleInjector {
         // Move attachments over from the old permissible
 
         //noinspection unchecked
-        Set<PermissionAttachment> var1 = (Set<PermissionAttachment>) PERMISSIBLE_BASE_ATTACHMENTS_FIELD.get(oldPermissible);
         List<PermissionAttachment> attachments = new ArrayList<>();
-        attachments.addAll(0, var1);
+        Object var1 = PERMISSIBLE_BASE_ATTACHMENTS_FIELD.get(oldPermissible);
+        if(var1 instanceof LinkedHashSet) {
+            // Sportbukkit, or any other fork that uses LinkedHashSet
+            Set<PermissionAttachment> var2 = (Set<PermissionAttachment>) var1;
+            attachments.addAll(0, var2);
+            Bukkit.getLogger().fine("Instanceof LinkedHashSet found.");
+        } else if(var1 instanceof LinkedList) {
+            // Bukkit, or Spigot, or any other fork that use LinkedList
+            List<PermissionAttachment> var2 = (List<PermissionAttachment>) var1;
+            attachments.addAll(0, var2);
+            Bukkit.getLogger().fine("Instanceof LinkedList found.");
+        } else {
+            // All else fails, resort to this.
+            attachments = (List<PermissionAttachment>) var1;
+            Bukkit.getLogger().warning("Instanceof not found -> " + var1.toString());
+        }
 
         newPermissible.convertAndAddAttachments(attachments);
         attachments.clear();
