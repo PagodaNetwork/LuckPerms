@@ -23,38 +23,15 @@
  *  SOFTWARE.
  */
 
-package me.lucko.luckperms.common.api;
+package me.lucko.luckperms.common.dependencies.relocation;
 
-import com.google.common.base.Preconditions;
+public final class RelocationHelper {
 
-import me.lucko.luckperms.common.storage.DataConstraints;
+    // screw maven shade
+    public static final String OKIO_STRING = String.valueOf(new char[]{'o', 'k', 'i', 'o'});
+    public static final String OKHTTP3_STRING = String.valueOf(new char[]{'o', 'k', 'h', 't', 't', 'p', '3'});
 
-public final class ApiUtils {
+    private RelocationHelper() {
 
-    public static String checkUsername(String s) {
-        if (s == null) {
-            return null;
-        }
-
-        Preconditions.checkArgument(
-                DataConstraints.PLAYER_USERNAME_TEST.test(s),
-                "Invalid username entry '" + s + "'. Usernames must be less than 16 chars and only contain 'a-z A-Z 1-9 _'."
-        );
-        return s;
     }
-
-    public static String checkName(String s) {
-        if (s == null) {
-            return null;
-        }
-
-        Preconditions.checkArgument(
-                DataConstraints.GROUP_NAME_TEST.test(s),
-                "Invalid name entry '" + s + "'. Names must be less than 37 chars and only contain 'a-z A-Z 1-9'."
-        );
-        return s.toLowerCase();
-    }
-
-    private ApiUtils() {}
-
 }
