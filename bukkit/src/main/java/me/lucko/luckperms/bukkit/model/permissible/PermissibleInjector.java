@@ -25,15 +25,19 @@
 
 package me.lucko.luckperms.bukkit.model.permissible;
 
+import me.lucko.luckperms.bukkit.LPBukkitPlugin;
 import me.lucko.luckperms.bukkit.compat.ReflectionUtil;
 import me.lucko.luckperms.bukkit.model.dummy.DummyPermissibleBase;
 
+import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.permissions.PermissibleBase;
 import org.bukkit.permissions.PermissionAttachment;
 
 import java.lang.reflect.Field;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Injects a {@link LPPermissible} into a {@link Player}.
@@ -99,7 +103,9 @@ public final class PermissibleInjector {
         // Move attachments over from the old permissible
 
         //noinspection unchecked
-        List<PermissionAttachment> attachments = (List<PermissionAttachment>) PERMISSIBLE_BASE_ATTACHMENTS_FIELD.get(oldPermissible);
+        Set<PermissionAttachment> var1 = (Set<PermissionAttachment>) PERMISSIBLE_BASE_ATTACHMENTS_FIELD.get(oldPermissible);
+        List<PermissionAttachment> attachments = new ArrayList<>();
+        attachments.addAll(0, var1);
 
         newPermissible.convertAndAddAttachments(attachments);
         attachments.clear();
@@ -111,6 +117,7 @@ public final class PermissibleInjector {
 
         // inject the new instance
         HUMAN_ENTITY_PERMISSIBLE_FIELD.set(player, newPermissible);
+        Bukkit.getLogger().info("Injected permissible for " + player.getName());
     }
 
     /**
