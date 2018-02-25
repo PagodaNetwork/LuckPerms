@@ -64,6 +64,6 @@ public class EventUserLoginProcess extends AbstractEvent implements UserLoginPro
 
     @Override
     public String toString() {
-        return "EventUserLoginProcess(uuid=" + this.getUuid() + ", username=" + this.getUsername() + ", user=" + this.getUser() + ")";
+        return "UserLoginProcessEvent(uuid=" + this.getUuid() + ", username=" + this.getUsername() + ", user=" + this.getUser() + ")";
     }
 }

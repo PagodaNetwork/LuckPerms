@@ -26,6 +26,7 @@
 package me.lucko.luckperms.common.storage;
 
 import com.google.common.base.Throwables;
+import com.google.common.collect.ImmutableList;
 
 import me.lucko.luckperms.api.HeldPermission;
 import me.lucko.luckperms.api.LogEntry;
@@ -52,13 +53,15 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 
 /**
- * Converts a {@link AbstractDao} to use {@link CompletableFuture}s
+ * Implements {@link Storage} using an {@link AbstractDao}.
  */
 public class AbstractStorage implements Storage {
     public static Storage create(LuckPermsPlugin plugin, AbstractDao backing) {
-        BufferedOutputStorage bufferedDs = BufferedOutputStorage.wrap(PhasedStorage.wrap(new AbstractStorage(plugin, backing)), 250L);
-        plugin.getScheduler().asyncRepeating(bufferedDs, 2L);
-        return bufferedDs;
+        Storage base = new AbstractStorage(plugin, backing);
+        Storage phased = PhasedStorage.wrap(base);
+        BufferedOutputStorage buffered = BufferedOutputStorage.wrap(phased, 250L);
+        plugin.getScheduler().asyncRepeating(buffered, 2L);
+        return buffered;
     }
 
     private final LuckPermsPlugin plugin;
@@ -181,7 +184,11 @@ public class AbstractStorage implements Storage {
 
     @Override
     public CompletableFuture<List<HeldPermission<UUID>>> getUsersWithPermission(String permission) {
-        return makeFuture(() -> this.dao.getUsersWithPermission(permission));
+        return makeFuture(() -> {
+            List<HeldPermission<UUID>> result = this.dao.getUsersWithPermission(permission);
+            result.removeIf(entry -> entry.asNode().hasExpired());
+            return ImmutableList.copyOf(result);
+        });
     }
 
     @Override
@@ -229,7 +236,11 @@ public class AbstractStorage implements Storage {
 
     @Override
     public CompletableFuture<List<HeldPermission<String>>> getGroupsWithPermission(String permission) {
-        return makeFuture(() -> this.dao.getGroupsWithPermission(permission));
+        return makeFuture(() -> {
+            List<HeldPermission<String>> result = this.dao.getGroupsWithPermission(permission);
+            result.removeIf(entry -> entry.asNode().hasExpired());
+            return ImmutableList.copyOf(result);
+        });
     }
 
     @Override

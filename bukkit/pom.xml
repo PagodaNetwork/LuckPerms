@@ -5,7 +5,7 @@
     <parent>
         <artifactId>luckperms</artifactId>
         <groupId>me.lucko.luckperms</groupId>
-        <version>4.0-SNAPSHOT</version>
+        <version>4.1-SNAPSHOT</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
@@ -93,6 +93,10 @@
                                     <shadedPattern>me.lucko.luckperms.lib.jedis</shadedPattern>
                                 </relocation>
                                 <relocation>
+                                    <pattern>redis.clients.util</pattern>
+                                    <shadedPattern>me.lucko.luckperms.lib.jedisutil</shadedPattern>
+                                </relocation>
+                                <relocation>
                                     <pattern>org.apache.commons.pool2</pattern>
                                     <shadedPattern>me.lucko.luckperms.lib.commonspool2</shadedPattern>
                                 </relocation>
@@ -126,6 +130,21 @@
             <groupId>com.google.code.findbugs</groupId>
             <artifactId>jsr305</artifactId>
             <version>3.0.2</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- caffeine -->
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+            <version>2.6.2</version>
+            <scope>provided</scope>
+        </dependency>
+        <!-- HikariCP -->
+        <dependency>
+            <groupId>com.zaxxer</groupId>
+            <artifactId>HikariCP</artifactId>
+            <version>2.7.8</version>
             <scope>provided</scope>
         </dependency>
 
@@ -237,4 +256,12 @@
             </exclusions>
         </dependency>
     </dependencies>
+
+    <repositories>
+        <repository>
+            <id>spigot-repo</id>
+            <url>https://hub.spigotmc.org/nexus/content/repositories/snapshots/</url>
+        </repository>
+    </repositories>
+
 </project>

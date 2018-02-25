@@ -37,6 +37,7 @@ import me.lucko.luckperms.common.config.keys.IntegerKey;
 import me.lucko.luckperms.common.config.keys.LowercaseStringKey;
 import me.lucko.luckperms.common.config.keys.MapKey;
 import me.lucko.luckperms.common.config.keys.StringKey;
+import me.lucko.luckperms.common.graph.TraversalAlgorithm;
 import me.lucko.luckperms.common.metastacking.SimpleMetaStackDefinition;
 import me.lucko.luckperms.common.metastacking.StandardStackElements;
 import me.lucko.luckperms.common.model.TemporaryModifier;
@@ -208,6 +209,21 @@ public class ConfigKeys {
     public static final ConfigKey<Boolean> APPLY_BUKKIT_ATTACHMENT_PERMISSIONS = EnduringKey.wrap(BooleanKey.of("apply-bukkit-attachment-permissions", true));
 
     /**
+     * If Nukkit child permissions are being applied. This setting is ignored on other platforms.
+     */
+    public static final ConfigKey<Boolean> APPLY_NUKKIT_CHILD_PERMISSIONS = EnduringKey.wrap(BooleanKey.of("apply-nukkit-child-permissions", true));
+
+    /**
+     * If Nukkit default permissions are being applied. This setting is ignored on other platforms.
+     */
+    public static final ConfigKey<Boolean> APPLY_NUKKIT_DEFAULT_PERMISSIONS = EnduringKey.wrap(BooleanKey.of("apply-nukkit-default-permissions", true));
+
+    /**
+     * If Nukkit attachment permissions are being applied. This setting is ignored on other platforms.
+     */
+    public static final ConfigKey<Boolean> APPLY_NUKKIT_ATTACHMENT_PERMISSIONS = EnduringKey.wrap(BooleanKey.of("apply-nukkit-attachment-permissions", true));
+
+    /**
      * If BungeeCord configured permissions are being applied. This setting is ignored on other platforms.
      */
     public static final ConfigKey<Boolean> APPLY_BUNGEE_CONFIG_PERMISSIONS = EnduringKey.wrap(BooleanKey.of("apply-bungee-config-permissions", false));
@@ -221,6 +237,21 @@ public class ConfigKeys {
      * If Sponge default subjects should be applied
      */
     public static final ConfigKey<Boolean> APPLY_SPONGE_DEFAULT_SUBJECTS = EnduringKey.wrap(BooleanKey.of("apply-sponge-default-subjects", true));
+
+    /**
+     * The algorithm LuckPerms should use when traversing the "inheritance tree"
+     */
+    public static final ConfigKey<TraversalAlgorithm> INHERITANCE_TRAVERSAL_ALGORITHM = AbstractKey.of(c -> {
+        String value = c.getString("inheritance-traversal-algorithm", "depth-first-pre-order");
+        switch (value.toLowerCase()) {
+            case "breadth-first":
+                return TraversalAlgorithm.BREADTH_FIRST;
+            case "depth-first-post-order":
+                return TraversalAlgorithm.DEPTH_FIRST_POST_ORDER;
+            default:
+                return TraversalAlgorithm.DEPTH_FIRST_PRE_ORDER;
+        }
+    });
 
     /**
      * The configured group weightings
@@ -375,6 +406,11 @@ public class ConfigKeys {
     public static final ConfigKey<String> MONGODB_COLLECTION_PREFIX = EnduringKey.wrap(StringKey.of("data.mongodb_collection_prefix", ""));
 
     /**
+     * MongoDB ClientConnectionURI to override default connection options
+     */
+    public static final ConfigKey<String> MONGODB_CONNECTION_URI = EnduringKey.wrap(StringKey.of("data.mongodb_connection_URI", ""));
+
+    /**
      * The name of the storage method being used
      */
     public static final ConfigKey<String> STORAGE_METHOD = EnduringKey.wrap(LowercaseStringKey.of("storage-method", "h2"));
@@ -440,7 +476,17 @@ public class ConfigKeys {
     /**
      * The URL of the web editor
      */
-    public static final ConfigKey<String> WEB_EDITOR_URL_PATTERN = StringKey.of("web-editor-url", "https://lpedit.lucko.me/");
+    public static final ConfigKey<String> WEB_EDITOR_URL_PATTERN = StringKey.of("web-editor-url", "https://luckperms.github.io/editor/");
+
+    /**
+     * The URL of the verbose viewer
+     */
+    public static final ConfigKey<String> VERBOSE_VIEWER_URL_PATTERN = StringKey.of("verbose-viewer-url", "https://luckperms.github.io/verbose/");
+
+    /**
+     * The URL of the tree viewer
+     */
+    public static final ConfigKey<String> TREE_VIEWER_URL_PATTERN = StringKey.of("tree-viewer-url", "https://luckperms.github.io/treeview/");
 
     private static Map<String, ConfigKey<?>> KEYS = null;
 

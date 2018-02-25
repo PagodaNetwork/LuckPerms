@@ -131,6 +131,18 @@ apply-shorthand: true
 # If set to false, LuckPerms will ignore these values.
 apply-bungee-config-permissions: false
 
+# The algorithm LuckPerms should use when traversing the "inheritance tree".
+#
+# The valid options are:
+# - breadth-first
+# - depth-first-pre-order
+# - depth-first-post-order
+#
+# See here for information about the differences between each algorithm.
+# - https://en.wikipedia.org/wiki/Breadth-first_search
+# - https://en.wikipedia.org/wiki/Depth-first_search
+inheritance-traversal-algorithm: depth-first-pre-order
+
 # Define special group weights for this server.
 # Default is just 0.
 group-weight:
@@ -258,6 +270,10 @@ data:
   # The prefix to use for all LuckPerms collections. Change this if you want to use different
   # collections for different servers. The default is no prefix.
   mongodb_collection_prefix: ''
+
+  # MongoDB ClientConnectionURI for use with replicasets and custom connection options
+  # See https://docs.mongodb.com/manual/reference/connection-string/
+  mongodb_connection_URI: ''
 
   # This option controls how frequently LuckPerms will perform a sync task.
   # A sync task will refresh all data from the storage, and ensure that the most up-to-date data is

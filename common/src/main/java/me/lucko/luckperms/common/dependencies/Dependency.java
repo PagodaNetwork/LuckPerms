@@ -43,27 +43,27 @@ public enum Dependency {
     ASM(
             "org.ow2.asm",
             "asm",
-            "5.2",
-            "Pl6g19osUVXvT0cNkJLULeNOP1PbZYnHwH1nIa30uj4="
+            "6.0",
+            "3Ylxx0pOaXiZqOlcquTqh2DqbEhtxrl7F5XnV2BCBGE="
     ),
     ASM_COMMONS(
             "org.ow2.asm",
             "asm-commons",
-            "5.2",
-            "zBMYiX4sdxy3l6aNX06mQcI6UfBDfKUXq+z5ZN2yZAs="
+            "6.0",
+            "8bzlxkipagF73NAf5dWa+YRSl/17ebgcAVpvu9lxmr8="
     ),
     JAR_RELOCATOR(
             "me.lucko",
             "jar-relocator",
-            "1.2",
-            "ECR0wrAMwmM0dpmuY1ifCG+2rpObOIlSI127jBbSrbI="
+            "1.3",
+            "mmz3ltQbS8xXGA2scM0ZH6raISlt4nukjCiU2l9Jxfs="
     ),
 
     CAFFEINE(
             "com{}github{}ben-manes{}caffeine",
             "caffeine",
-            "2.6.1",
-            "5F55lb0PmSThBWkRJ9mwkvN+8xT6uDZKIwKk37QW0co=",
+            "2.6.2",
+            "53pEV3NfB1FY29Ahx2YXl91IVpX8Ttkt/d401HFNl1A=",
             Relocation.of("caffeine", "com{}github{}benmanes{}caffeine")
     ),
     OKIO(
@@ -123,8 +123,8 @@ public enum Dependency {
     HIKARI(
             "com{}zaxxer",
             "HikariCP",
-            "2.7.6",
-            "gEhb0Z6eOIgGT5mG9NhyyEtbBxJx/Rks6aDiWUnmqK4=",
+            "2.7.8",
+            "nmp5eJvNRsz/4fxakr4re5Tdx/U4wy8BlSU2si0j/ZY=",
             Relocation.of("hikari", "com{}zaxxer{}hikari")
     ),
     SLF4J_SIMPLE(
@@ -156,6 +156,7 @@ public enum Dependency {
             "HqqWy45QVeTVF0Z/DzsrPLvGKn2dHotqI8YX7GDThvo=",
             Relocation.allOf(
                     Relocation.of("jedis", "redis{}clients{}jedis"),
+                    Relocation.of("jedisutil", "redis{}clients{}util"),
                     Relocation.of("commonspool2", "org{}apache{}commons{}pool2")
             )
     ),

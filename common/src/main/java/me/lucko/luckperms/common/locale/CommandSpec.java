@@ -49,18 +49,21 @@ public enum CommandSpec {
 
     SYNC("Sync changes with the storage", "/%s sync"),
     INFO("Print general plugin info", "/%s info"),
-    DEBUG("Produce debugging output", "/%s debug"),
-    VERBOSE("Manage verbose permission checking", "/%s verbose <true|false> [filter]",
+    EDITOR("Creates a new editor session", "/%s editor [type]",
             Arg.list(
-                    Arg.create("on|record|off|paste", true, "whether to enable/disable logging, or to paste the logged output"),
-                    Arg.create("filter", false, "the filter to match entries against"),
-                    Arg.create("--slim", false, "add \"--slim\" to exclude trace data from the pasted output")
+                    Arg.create("type", false, "the types to load into the editor. ('all', 'users' or 'groups')")
             )
     ),
-    TREE("Generate a tree view of permissions", "/%s tree [selection] [max level] [player]",
+    DEBUG("Produce debugging output", "/%s debug"),
+    VERBOSE("Manage verbose permission checking", "/%s verbose <on|record|off|paste> [filter]",
             Arg.list(
-                    Arg.create("selection", false, "the root of the tree. specify \".\" to include all permissions"),
-                    Arg.create("max level", false, "how many branch levels should be returned"),
+                    Arg.create("on|record|off|paste", true, "whether to enable/disable logging, or to paste the logged output"),
+                    Arg.create("filter", false, "the filter to match entries against")
+            )
+    ),
+    TREE("Generate a tree view of permissions", "/%s tree [scope] [player]",
+            Arg.list(
+                    Arg.create("scope", false, "the root of the tree. specify \".\" to include all permissions"),
                     Arg.create("player", false, "the name of an online player to check against")
             )
     ),

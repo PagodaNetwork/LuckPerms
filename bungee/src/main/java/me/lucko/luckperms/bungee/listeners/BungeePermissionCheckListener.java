@@ -27,6 +27,7 @@ package me.lucko.luckperms.bungee.listeners;
 
 import me.lucko.luckperms.api.Contexts;
 import me.lucko.luckperms.api.Tristate;
+import me.lucko.luckperms.api.context.ContextSet;
 import me.lucko.luckperms.bungee.LPBungeePlugin;
 import me.lucko.luckperms.bungee.event.TristateCheckEvent;
 import me.lucko.luckperms.common.config.ConfigKeys;
@@ -38,6 +39,8 @@ import net.md_5.bungee.api.event.PermissionCheckEvent;
 import net.md_5.bungee.api.plugin.Listener;
 import net.md_5.bungee.event.EventHandler;
 import net.md_5.bungee.event.EventPriority;
+
+import java.util.Objects;
 
 public class BungeePermissionCheckListener implements Listener {
     private final LPBungeePlugin plugin;
@@ -51,6 +54,9 @@ public class BungeePermissionCheckListener implements Listener {
         if (!(e.getSender() instanceof ProxiedPlayer)) {
             return;
         }
+
+        Objects.requireNonNull(e.getPermission(), "permission");
+        Objects.requireNonNull(e.getSender(), "sender");
 
         ProxiedPlayer player = ((ProxiedPlayer) e.getSender());
 
@@ -69,11 +75,14 @@ public class BungeePermissionCheckListener implements Listener {
         e.setHasPermission(result.asBoolean());
     }
 
-    @EventHandler(priority = EventPriority.HIGH)
+    @EventHandler
     public void onPlayerTristateCheck(TristateCheckEvent e) {
         if (!(e.getSender() instanceof ProxiedPlayer)) {
             return;
         }
+
+        Objects.requireNonNull(e.getPermission(), "permission");
+        Objects.requireNonNull(e.getSender(), "sender");
 
         ProxiedPlayer player = ((ProxiedPlayer) e.getSender());
 
@@ -90,5 +99,22 @@ public class BungeePermissionCheckListener implements Listener {
         }
 
         e.setResult(result);
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onOtherPermissionCheck(PermissionCheckEvent e) {
+        if (e.getSender() instanceof ProxiedPlayer) {
+            return;
+        }
+
+        Objects.requireNonNull(e.getPermission(), "permission");
+        Objects.requireNonNull(e.getSender(), "sender");
+
+        String permission = e.getPermission();
+        Tristate result = Tristate.fromBoolean(e.hasPermission());
+        String name = "internal/" + e.getSender().getName();
+
+        this.plugin.getVerboseHandler().offerCheckData(CheckOrigin.PLATFORM_PERMISSION_CHECK, name, ContextSet.empty(), permission, result);
+        this.plugin.getPermissionVault().offer(permission);
     }
 }

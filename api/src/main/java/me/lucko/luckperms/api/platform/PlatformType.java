@@ -36,7 +36,8 @@ public enum PlatformType {
 
     BUKKIT("Bukkit"),
     BUNGEE("Bungee"),
-    SPONGE("Sponge");
+    SPONGE("Sponge"),
+    NUKKIT("Nukkit");
 
     private final String friendlyName;
 

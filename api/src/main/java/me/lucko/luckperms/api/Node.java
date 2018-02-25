@@ -32,22 +32,59 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Stream;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 
 /**
- * Represents a permission node.
+ * Represents a LuckPerms "node".
  *
- * <p>All implementations of this interface must be immutable.</p>
+ * <p>The {@link Node} class encapsulates more than just permission assignments.
+ * Nodes are used to store data about inherited groups, as well as assigned
+ * prefixes, suffixes and meta values.</p>
  *
- * <p>Use the {@link NodeFactory} to obtain and construct instances.</p>
+ * <p>Combining these various states into one object (a "node") means that a
+ * holder only has to have one type of data set (a set of nodes) in order to
+ * take on various properties.</p>
  *
+ * <p>It is recommended that users of the API make use of {@link Stream}s
+ * to manipulate data and obtain the required information.</p>
+ *
+ * <p>This interface provides a number of methods to read the attributes of the
+ * node, as well as methods to query and extract additional state and properties
+ * from these settings.</p>
+ *
+ * <p>Nodes have the following attributes:</p>
+ * <p></p>
+ * <ul>
+ *     <li>{@link #getPermission() permission} - the actual permission string</li>
+ *     <li>{@link #getValuePrimitive() value} - the value of the node (false for negated)</li>
+ *     <li>{@link #isOverride() override} - if the node is marked as having special priority over other nodes</li>
+ *     <li>{@link #getServer() server} - the specific server where this node should apply</li>
+ *     <li>{@link #getWorld() world} - the specific world where this node should apply</li>
+ *     <li>{@link #getContexts() context} - the additional contexts required for this node to apply </li>
+ *     <li>{@link #getExpiry() expiry} - the time when this node should expire</li>
+ * </ul>
+ *
+ * <p>Nodes can also fall into the following sub categories.</p>
+ * <p></p>
+ * <ul>
+ *     <li>normal - just a regular permission</li>
+ *     <li>{@link #isGroupNode() group node} - a "group node" marks that the holder should inherit data from another group</li>
+ *     <li>{@link #isPrefix() prefix} - represents an assigned prefix</li>
+ *     <li>{@link #isSuffix() suffix} - represents an assigned suffix</li>
+ *     <li>{@link #isMeta() meta} - represents an assigned meta option</li>
+ * </ul>
+ *
+ * <p>The core node state must be immutable in all implementations.</p>
+ *
+ * @see NodeFactory for obtaining and constructing instances.
  * @since 2.6
  */
 @Immutable
-public interface Node extends Map.Entry<String, Boolean> {
+public interface Node {
 
     /**
      * Gets the permission string
@@ -64,7 +101,6 @@ public interface Node extends Map.Entry<String, Boolean> {
      *
      * @return the permission's value
      */
-    @Override
     @Nonnull
     default Boolean getValue() {
         return getValuePrimitive();
@@ -318,39 +354,90 @@ public interface Node extends Map.Entry<String, Boolean> {
     Map.Entry<Integer, String> getSuffix() throws IllegalStateException;
 
     /**
-     * Checks if this Node is equal to another node
+     * Returns if this Node is equal to another node
      *
      * @param obj the other node
      * @return true if this node is equal to the other provided
-     * @see #equalsIgnoringValue(Node) for a less strict implementation of this method
+     * @see StandardNodeEquality#EXACT
      */
     @Override
     boolean equals(Object obj);
 
     /**
-     * Similar to {@link Node#equals(Object)}, except doesn't take note of the value
+     * Returns if this Node is equal to another node as defined by the given
+     * {@link StandardNodeEquality} predicate.
+     *
+     * @param other the other node
+     * @param equalityPredicate the predicate
+     * @return true if this node is considered equal
+     * @since 4.1
+     */
+    boolean standardEquals(Node other, StandardNodeEquality equalityPredicate);
+
+    /**
+     * Returns if this Node is equal to another node as defined by the given
+     * {@link NodeEqualityPredicate}.
+     *
+     * @param other the other node
+     * @param equalityPredicate the predicate
+     * @return true if this node is considered equal
+     * @since 4.1
+     */
+    default boolean equals(Node other, NodeEqualityPredicate equalityPredicate) {
+        return equalityPredicate.areEqual(this, other);
+    }
+
+    /**
+     * Similar to {@link Node#equals(Object)}, except doesn't take note of the
+     * value.
      *
      * @param other the other node
      * @return true if the two nodes are almost equal
+     * @deprecated in favour of {@link #equals(Node, NodeEqualityPredicate)}
+     * @see StandardNodeEquality#IGNORE_VALUE
      */
-    boolean equalsIgnoringValue(@Nonnull Node other);
+    @Deprecated
+    default boolean equalsIgnoringValue(@Nonnull Node other) {
+        return equals(other, StandardNodeEquality.IGNORE_VALUE);
+    }
 
     /**
-     * Similar to {@link Node#equals(Object)}, except doesn't take note of the expiry time or value
+     * Similar to {@link Node#equals(Object)}, except doesn't take note of the
+     * expiry time or value.
      *
      * @param other the other node
      * @return true if the two nodes are almost equal
+     * @deprecated in favour of {@link #equals(Node, NodeEqualityPredicate)}
+     * @see StandardNodeEquality#IGNORE_EXPIRY_TIME_AND_VALUE
      */
-    boolean almostEquals(@Nonnull Node other);
+    @Deprecated
+    default boolean almostEquals(@Nonnull Node other) {
+        return equals(other, StandardNodeEquality.IGNORE_EXPIRY_TIME_AND_VALUE);
+    }
 
     /**
-     * Similar to {@link Node#equals(Object)}, except doesn't take note of the value or if the node is temporary
+     * Similar to {@link Node#equals(Object)}, except doesn't take note of the
+     * value or if the node is temporary.
      *
      * @param other the other node
      * @return true if the two nodes are almost equal
      * @since 2.8
+     * @deprecated in favour of {@link #equals(Node, NodeEqualityPredicate)}
+     * @see StandardNodeEquality#IGNORE_VALUE_OR_IF_TEMPORARY
      */
-    boolean equalsIgnoringValueOrTemp(@Nonnull Node other);
+    @Deprecated
+    default boolean equalsIgnoringValueOrTemp(@Nonnull Node other) {
+        return equals(other, StandardNodeEquality.IGNORE_VALUE_OR_IF_TEMPORARY);
+    }
+
+    /**
+     * Constructs a new builder initially containing the current properties of
+     * this node.
+     *
+     * @return a new builder
+     * @since 4.1
+     */
+    Builder toBuilder();
 
     /**
      * Builds a Node instance
