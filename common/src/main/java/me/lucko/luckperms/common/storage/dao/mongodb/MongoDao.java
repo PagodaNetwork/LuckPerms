@@ -26,9 +26,9 @@
 package me.lucko.luckperms.common.storage.dao.mongodb;
 
 import com.google.common.base.Strings;
-import com.google.common.collect.ImmutableList;
 import com.mongodb.MongoClient;
 import com.mongodb.MongoClientOptions;
+import com.mongodb.MongoClientURI;
 import com.mongodb.MongoCredential;
 import com.mongodb.ServerAddress;
 import com.mongodb.client.MongoCollection;
@@ -78,35 +78,41 @@ public class MongoDao extends AbstractDao {
     private MongoClient mongoClient;
     private MongoDatabase database;
     private final String prefix;
+    private final String connectionUri;
 
-    public MongoDao(LuckPermsPlugin plugin, StorageCredentials configuration, String prefix) {
+    public MongoDao(LuckPermsPlugin plugin, StorageCredentials configuration, String prefix, String connectionUri) {
         super(plugin, "MongoDB");
         this.configuration = configuration;
         this.prefix = prefix;
+        this.connectionUri = connectionUri;
     }
 
     @Override
     public void init() {
-        MongoCredential credential = null;
-        if (!Strings.isNullOrEmpty(this.configuration.getUsername())) {
-            credential = MongoCredential.createCredential(
-                    this.configuration.getUsername(),
-                    this.configuration.getDatabase(),
-                    Strings.isNullOrEmpty(this.configuration.getPassword()) ? null : this.configuration.getPassword().toCharArray()
-            );
-        }
-
-        String[] addressSplit = this.configuration.getAddress().split(":");
-        String host = addressSplit[0];
-        int port = addressSplit.length > 1 ? Integer.parseInt(addressSplit[1]) : 27017;
-        ServerAddress address = new ServerAddress(host, port);
-
-        if (credential == null) {
-            this.mongoClient = new MongoClient(address);
+        if (!Strings.isNullOrEmpty(this.connectionUri)) {
+            this.mongoClient = new MongoClient(new MongoClientURI(this.connectionUri));
         } else {
-            this.mongoClient = new MongoClient(address, credential, MongoClientOptions.builder().build());
-        }
+            MongoCredential credential = null;
+            if (!Strings.isNullOrEmpty(this.configuration.getUsername())) {
+                credential = MongoCredential.createCredential(
+                        this.configuration.getUsername(),
+                        this.configuration.getDatabase(),
+                        Strings.isNullOrEmpty(this.configuration.getPassword()) ? null : this.configuration.getPassword().toCharArray()
+                );
+            }
 
+            String[] addressSplit = this.configuration.getAddress().split(":");
+            String host = addressSplit[0];
+            int port = addressSplit.length > 1 ? Integer.parseInt(addressSplit[1]) : 27017;
+            ServerAddress address = new ServerAddress(host, port);
+
+            if (credential == null) {
+                this.mongoClient = new MongoClient(address);
+            } else {
+                this.mongoClient = new MongoClient(address, credential, MongoClientOptions.builder().build());
+            }
+        }
+        
         this.database = this.mongoClient.getDatabase(this.configuration.getDatabase());
     }
 
@@ -263,7 +269,7 @@ public class MongoDao extends AbstractDao {
                         save = true;
                     }
 
-                    if (save) {
+                    if (save | user.auditTemporaryPermissions()) {
                         c.replaceOne(new Document("_id", user.getUuid()), userToDoc(user));
                     }
                 } else {
@@ -311,7 +317,7 @@ public class MongoDao extends AbstractDao {
 
     @Override
     public List<HeldPermission<UUID>> getUsersWithPermission(String permission) {
-        ImmutableList.Builder<HeldPermission<UUID>> held = ImmutableList.builder();
+        List<HeldPermission<UUID>> held = new ArrayList<>();
         MongoCollection<Document> c = this.database.getCollection(this.prefix + "users");
         try (MongoCursor<Document> cursor = c.find().iterator()) {
             while (cursor.hasNext()) {
@@ -327,7 +333,7 @@ public class MongoDao extends AbstractDao {
                 }
             }
         }
-        return held.build();
+        return held;
     }
 
     @Override
@@ -438,7 +444,7 @@ public class MongoDao extends AbstractDao {
 
     @Override
     public List<HeldPermission<String>> getGroupsWithPermission(String permission) {
-        ImmutableList.Builder<HeldPermission<String>> held = ImmutableList.builder();
+        List<HeldPermission<String>> held = new ArrayList<>();
         MongoCollection<Document> c = this.database.getCollection(this.prefix + "groups");
         try (MongoCursor<Document> cursor = c.find().iterator()) {
             while (cursor.hasNext()) {
@@ -454,7 +460,7 @@ public class MongoDao extends AbstractDao {
                 }
             }
         }
-        return held.build();
+        return held;
     }
 
     @Override

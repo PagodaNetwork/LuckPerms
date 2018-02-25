@@ -25,15 +25,17 @@
 
 package me.lucko.luckperms.common.processors;
 
+import com.google.common.collect.ImmutableMap;
+
 import me.lucko.luckperms.api.Tristate;
 import me.lucko.luckperms.common.utils.PatternCache;
 
+import java.util.Collections;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
-public class RegexProcessor implements PermissionProcessor {
-    private final Map<Pattern, Boolean> regexPermissions = new ConcurrentHashMap<>();
+public class RegexProcessor extends AbstractPermissionProcessor implements PermissionProcessor {
+    private Map<Pattern, Boolean> regexPermissions = Collections.emptyMap();
 
     @Override
     public Tristate hasPermission(String permission) {
@@ -47,9 +49,9 @@ public class RegexProcessor implements PermissionProcessor {
     }
 
     @Override
-    public void updateBacking(Map<String, Boolean> map) {
-        this.regexPermissions.clear();
-        for (Map.Entry<String, Boolean> e : map.entrySet()) {
+    public void refresh() {
+        ImmutableMap.Builder<Pattern, Boolean> builder = ImmutableMap.builder();
+        for (Map.Entry<String, Boolean> e : this.sourceMap.entrySet()) {
             if (!e.getKey().startsWith("r=") && !e.getKey().startsWith("R=")) {
                 continue;
             }
@@ -61,7 +63,8 @@ public class RegexProcessor implements PermissionProcessor {
                 continue;
             }
 
-            this.regexPermissions.put(p, e.getValue());
+            builder.put(p, e.getValue());
         }
+        this.regexPermissions = builder.build();
     }
 }

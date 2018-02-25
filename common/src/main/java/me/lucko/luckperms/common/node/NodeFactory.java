@@ -62,10 +62,6 @@ public final class NodeFactory {
         return new NodeBuilder(s);
     }
 
-    public static Node.Builder builder(Node other) {
-        return new NodeBuilder(other);
-    }
-
     public static Node.Builder buildGroupNode(String groupName) {
         return new NodeBuilder(groupNode(groupName));
     }
@@ -96,6 +92,10 @@ public final class NodeFactory {
 
     public static String groupNode(String groupName) {
         return GROUP_NODE_MARKER + groupName;
+    }
+
+    public static String chatMetaNode(ChatMetaType type, int priority, String value) {
+        return type == ChatMetaType.PREFIX ? prefixNode(priority, value) : suffixNode(priority, value);
     }
 
     public static String prefixNode(int priority, String prefix) {

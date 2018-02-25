@@ -25,6 +25,8 @@
 
 package me.lucko.luckperms.bukkit.migration;
 
+import com.google.common.base.Strings;
+
 import me.lucko.luckperms.api.event.cause.CreationCause;
 import me.lucko.luckperms.common.commands.CommandPermission;
 import me.lucko.luckperms.common.commands.CommandResult;
@@ -41,15 +43,20 @@ import me.lucko.luckperms.common.model.User;
 import me.lucko.luckperms.common.node.NodeFactory;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
 import me.lucko.luckperms.common.utils.Predicates;
-import me.lucko.luckperms.common.utils.SafeIterator;
+import me.lucko.luckperms.common.utils.SafeIteration;
 
 import org.bukkit.Bukkit;
 
 import ru.tehkode.permissions.PermissionEntity;
 import ru.tehkode.permissions.PermissionGroup;
 import ru.tehkode.permissions.PermissionManager;
+import ru.tehkode.permissions.PermissionUser;
+import ru.tehkode.permissions.PermissionsData;
 import ru.tehkode.permissions.bukkit.PermissionsEx;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
@@ -60,6 +67,24 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 public class MigrationPermissionsEx extends SubCommand<Object> {
+    private static final Method GET_DATA_METHOD;
+    private static final Field TIMED_PERMISSIONS_FIELD;
+    private static final Field TIMED_PERMISSIONS_TIME_FIELD;
+    static {
+        try {
+            GET_DATA_METHOD = PermissionEntity.class.getDeclaredMethod("getData");
+            GET_DATA_METHOD.setAccessible(true);
+
+            TIMED_PERMISSIONS_FIELD = PermissionEntity.class.getDeclaredField("timedPermissions");
+            TIMED_PERMISSIONS_FIELD.setAccessible(true);
+
+            TIMED_PERMISSIONS_TIME_FIELD = PermissionEntity.class.getDeclaredField("timedPermissionsTime");
+            TIMED_PERMISSIONS_TIME_FIELD.setAccessible(true);
+        } catch (NoSuchMethodException | NoSuchFieldException e) {
+            throw new ExceptionInInitializerError(e);
+        }
+    }
+
     public MigrationPermissionsEx(LocaleManager locale) {
         super(CommandSpec.MIGRATION_COMMAND.spec(locale), "permissionsex", CommandPermission.MIGRATION, Predicates.alwaysFalse());
     }
@@ -92,7 +117,7 @@ public class MigrationPermissionsEx extends SubCommand<Object> {
         log.log("Starting group migration.");
         AtomicInteger groupCount = new AtomicInteger(0);
         Set<String> ladders = new HashSet<>();
-        SafeIterator.iterate(manager.getGroupList(), group -> {
+        SafeIteration.iterate(manager.getGroupList(), group -> {
             int groupWeight = maxWeight - group.getRank();
 
             final String groupName = MigrationUtils.standardizeName(group.getName());
@@ -136,7 +161,7 @@ public class MigrationPermissionsEx extends SubCommand<Object> {
         // Increment the max weight from the group migrations. All user meta should override.
         int userWeight = maxWeight + 5;
 
-        SafeIterator.iterate(manager.getUsers(), user -> {
+        SafeIteration.iterate(manager.getUsers(), user -> {
             UUID u = BukkitMigrationUtils.lookupUuid(log, user.getIdentifier());
             if (u == null) {
                 return;
@@ -148,22 +173,6 @@ public class MigrationPermissionsEx extends SubCommand<Object> {
             // migrate data
             migrateEntity(user, lpUser, userWeight);
 
-            // Lowest rank is the highest group #logic
-            String primary = null;
-            int weight = Integer.MAX_VALUE;
-            for (PermissionGroup group : user.getOwnParents()) {
-                if (group.getRank() < weight) {
-                    primary = group.getName();
-                    weight = group.getRank();
-                }
-            }
-
-            if (primary != null && !primary.isEmpty() && !primary.equalsIgnoreCase(NodeFactory.DEFAULT_GROUP_NAME)) {
-                lpUser.setPermission(NodeFactory.buildGroupNode(primary.toLowerCase()).build());
-                lpUser.getPrimaryGroup().setStoredValue(primary);
-                lpUser.unsetPermission(NodeFactory.buildGroupNode(NodeFactory.DEFAULT_GROUP_NAME).build());
-            }
-
             plugin.getUserManager().cleanup(lpUser);
             plugin.getStorage().saveUser(lpUser);
             log.logProgress("Migrated {} users so far.", userCount.incrementAndGet());
@@ -174,37 +183,87 @@ public class MigrationPermissionsEx extends SubCommand<Object> {
         return CommandResult.SUCCESS;
     }
 
-    private static void migrateEntity(PermissionEntity entity, PermissionHolder holder, int weight) {
-        // migrate permissions
-        Map<String, List<String>> permissions = entity.getAllPermissions();
-        for (Map.Entry<String, List<String>> worldData : permissions.entrySet()) {
-            String world = worldData.getKey();
-            if (world != null && (world.equals("") || world.equals("*"))) {
-                world = null;
-            }
-            if (world != null) {
-                world = world.toLowerCase();
-            }
+    private static Map<String, List<String>> getPermanentPermissions(PermissionEntity entity) {
+        try {
+            //noinspection unchecked
+            PermissionsData data = (PermissionsData) GET_DATA_METHOD.invoke(entity);
+            return data.getPermissionsMap();
+        } catch (IllegalAccessException | InvocationTargetException e) {
+            throw new RuntimeException(e);
+        }
+    }
 
+    private static void migrateEntity(PermissionEntity entity, PermissionHolder holder, int weight) {
+        // migrate permanent permissions
+        for (Map.Entry<String, List<String>> worldData : getPermanentPermissions(entity).entrySet()) {
+            String world = standardizeWorld(worldData.getKey());
             for (String node : worldData.getValue()) {
                 if (node.isEmpty()) continue;
                 holder.setPermission(MigrationUtils.parseNode(node, true).setWorld(world).build());
             }
         }
 
+        // migrate temporary permissions
+        Map<String, List<String>> timedPermissions;
+        Map<String, Long> timedPermissionsTime;
+
+        try {
+            //noinspection unchecked
+            timedPermissions = (Map<String, List<String>>) TIMED_PERMISSIONS_FIELD.get(entity);
+            //noinspection unchecked
+            timedPermissionsTime = (Map<String, Long>) TIMED_PERMISSIONS_TIME_FIELD.get(entity);
+        } catch (IllegalAccessException e) {
+            throw new RuntimeException(e);
+        }
+
+        for (Map.Entry<String, List<String>> worldData : timedPermissions.entrySet()) {
+            String world = standardizeWorld(worldData.getKey());
+            for (String node : worldData.getValue()) {
+                if (node.isEmpty()) continue;
+                long expiry = timedPermissionsTime.getOrDefault(Strings.nullToEmpty(world) + ":" + node, 0L);
+                holder.setPermission(MigrationUtils.parseNode(node, true).setWorld(world).setExpiry(expiry).build());
+            }
+        }
+
         // migrate parents
-        Map<String, List<PermissionGroup>> parents = entity.getAllParents();
-        for (Map.Entry<String, List<PermissionGroup>> worldData : parents.entrySet()) {
-            String world = worldData.getKey();
-            if (world != null && (world.equals("") || world.equals("*"))) {
-                world = null;
-            }
-            if (world != null) {
-                world = world.toLowerCase();
-            }
+        for (Map.Entry<String, List<PermissionGroup>> worldData : entity.getAllParents().entrySet()) {
+            String world = standardizeWorld(worldData.getKey());
+
+            // keep track of primary group
+            String primary = null;
+            int primaryWeight = Integer.MAX_VALUE;
 
             for (PermissionGroup parent : worldData.getValue()) {
-                holder.setPermission(NodeFactory.buildGroupNode(MigrationUtils.standardizeName(parent.getName())).setWorld(world).build());
+                String parentName = parent.getName();
+                long expiry = 0L;
+
+                // check for temporary parent
+                if (entity instanceof PermissionUser) {
+                    String expiryOption = entity.getOption("group-" + parentName + "-until", world);
+                    if (expiryOption != null) {
+                        try {
+                            expiry = Long.parseLong(expiryOption);
+                        } catch (NumberFormatException e) {
+                            // ignore
+                        }
+                    }
+                }
+
+                holder.setPermission(NodeFactory.buildGroupNode(MigrationUtils.standardizeName(parentName)).setWorld(world).setExpiry(expiry).build());
+
+                // migrate primary groups
+                if (world == null && holder instanceof User && expiry == 0) {
+                    if (parent.getRank() < primaryWeight) {
+                        primary = parent.getName();
+                        primaryWeight = parent.getRank();
+                    }
+                }
+            }
+
+            if (primary != null && !primary.isEmpty() && !primary.equalsIgnoreCase(NodeFactory.DEFAULT_GROUP_NAME)) {
+                User user = ((User) holder);
+                user.getPrimaryGroup().setStoredValue(primary);
+                user.unsetPermission(NodeFactory.buildGroupNode(NodeFactory.DEFAULT_GROUP_NAME).build());
             }
         }
 
@@ -221,28 +280,39 @@ public class MigrationPermissionsEx extends SubCommand<Object> {
         }
 
         // migrate options
-        Map<String, Map<String, String>> options = entity.getAllOptions();
-        for (Map.Entry<String, Map<String, String>> worldData : options.entrySet()) {
-            String world = worldData.getKey();
-            if (world != null && (world.isEmpty() || world.equals("*"))) {
-                world = null;
-            }
-            if (world != null) {
-                world = world.toLowerCase();
-            }
-
+        for (Map.Entry<String, Map<String, String>> worldData : entity.getAllOptions().entrySet()) {
+            String world = standardizeWorld(worldData.getKey());
             for (Map.Entry<String, String> opt : worldData.getValue().entrySet()) {
                 if (opt.getKey() == null || opt.getKey().isEmpty() || opt.getValue() == null || opt.getValue().isEmpty()) {
                     continue;
                 }
 
                 String key = opt.getKey().toLowerCase();
-                if (key.equals(NodeFactory.PREFIX_KEY) || key.equals(NodeFactory.SUFFIX_KEY) || key.equals(NodeFactory.WEIGHT_KEY) || key.equals("rank") || key.equals("rank-ladder") || key.equals("name") || key.equals("username")) {
+                boolean ignore = key.equals(NodeFactory.PREFIX_KEY) ||
+                        key.equals(NodeFactory.SUFFIX_KEY) ||
+                        key.equals(NodeFactory.WEIGHT_KEY) ||
+                        key.equals("rank") ||
+                        key.equals("rank-ladder") ||
+                        key.equals("name") ||
+                        key.equals("username") ||
+                        (key.startsWith("group-") && key.endsWith("-until"));
+
+                if (ignore) {
                     continue;
                 }
 
                 holder.setPermission(NodeFactory.buildMetaNode(opt.getKey(), opt.getValue()).setWorld(world).build());
             }
         }
+    }
+
+    private static String standardizeWorld(String world) {
+        if (world != null && (world.isEmpty() || world.equals("*"))) {
+            world = null;
+        }
+        if (world != null) {
+            world = world.toLowerCase();
+        }
+        return world;
     }
 }

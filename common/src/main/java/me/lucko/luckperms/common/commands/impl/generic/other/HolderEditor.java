@@ -25,10 +25,7 @@
 
 package me.lucko.luckperms.common.commands.impl.generic.other;
 
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonPrimitive;
 
 import me.lucko.luckperms.common.commands.ArgumentPermissions;
 import me.lucko.luckperms.common.commands.CommandPermission;
@@ -40,11 +37,10 @@ import me.lucko.luckperms.common.locale.CommandSpec;
 import me.lucko.luckperms.common.locale.LocaleManager;
 import me.lucko.luckperms.common.locale.Message;
 import me.lucko.luckperms.common.model.PermissionHolder;
-import me.lucko.luckperms.common.model.User;
-import me.lucko.luckperms.common.node.NodeModel;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
 import me.lucko.luckperms.common.utils.Predicates;
-import me.lucko.luckperms.common.webeditor.WebEditorUtils;
+import me.lucko.luckperms.common.utils.web.StandardPastebin;
+import me.lucko.luckperms.common.webeditor.WebEditor;
 
 import net.kyori.text.Component;
 import net.kyori.text.TextComponent;
@@ -52,6 +48,7 @@ import net.kyori.text.event.ClickEvent;
 import net.kyori.text.event.HoverEvent;
 import net.kyori.text.format.TextColor;
 
+import java.util.Collections;
 import java.util.List;
 
 public class HolderEditor<T extends PermissionHolder> extends SubCommand<T> {
@@ -69,36 +66,17 @@ public class HolderEditor<T extends PermissionHolder> extends SubCommand<T> {
         Message.EDITOR_START.send(sender);
 
         // form the payload data
-        JsonObject payload = new JsonObject();
-        payload.addProperty("who", WebEditorUtils.getHolderIdentifier(holder));
-        payload.addProperty("whoFriendly", holder.getFriendlyName());
-        if (holder.getType().isUser()) {
-            payload.addProperty("whoUuid", ((User) holder).getUuid().toString());
-        }
-        payload.addProperty("cmdAlias", label);
-        payload.addProperty("uploadedBy", sender.getNameWithLocation());
-        payload.addProperty("uploadedByUuid", sender.getUuid().toString());
-        payload.addProperty("time", System.currentTimeMillis());
-
-        // attach the holders permissions
-        payload.add("nodes", WebEditorUtils.serializePermissions(holder.getEnduringNodes().values().stream().map(NodeModel::fromNode)));
-
-        // attach an array of all permissions known to the server, to use for tab completion in the editor
-        JsonArray knownPermsArray = new JsonArray();
-        for (String perm : plugin.getPermissionVault().rootAsList()) {
-            knownPermsArray.add(new JsonPrimitive(perm));
-        }
-        payload.add("knownPermissions", knownPermsArray);
+        JsonObject payload = WebEditor.formPayload(Collections.singletonList(holder), sender, label, plugin);
 
         // upload the payload data to gist
-        String gistId = WebEditorUtils.postToGist(new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create().toJson(payload));
-        if (gistId == null) {
+        String pasteId = StandardPastebin.BYTEBIN.postJson(payload).id();
+        if (pasteId == null) {
             Message.EDITOR_UPLOAD_FAILURE.send(sender);
             return CommandResult.STATE_ERROR;
         }
 
         // form a url for the editor
-        String url = plugin.getConfiguration().get(ConfigKeys.WEB_EDITOR_URL_PATTERN) + "?" + gistId;
+        String url = plugin.getConfiguration().get(ConfigKeys.WEB_EDITOR_URL_PATTERN) + "?" + pasteId;
 
         Message.EDITOR_URL.send(sender);
 

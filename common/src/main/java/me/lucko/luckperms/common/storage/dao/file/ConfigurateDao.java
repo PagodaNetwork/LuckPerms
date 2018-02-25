@@ -25,30 +25,29 @@
 
 package me.lucko.luckperms.common.storage.dao.file;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
+import com.google.common.collect.Maps;
 
+import me.lucko.luckperms.api.ChatMetaType;
 import me.lucko.luckperms.api.HeldPermission;
 import me.lucko.luckperms.api.LogEntry;
 import me.lucko.luckperms.api.Node;
 import me.lucko.luckperms.api.context.ImmutableContextSet;
 import me.lucko.luckperms.common.actionlog.Log;
 import me.lucko.luckperms.common.bulkupdate.BulkUpdate;
-import me.lucko.luckperms.common.commands.CommandManager;
 import me.lucko.luckperms.common.contexts.ContextSetConfigurateSerializer;
 import me.lucko.luckperms.common.managers.group.GroupManager;
 import me.lucko.luckperms.common.managers.track.TrackManager;
 import me.lucko.luckperms.common.model.Group;
 import me.lucko.luckperms.common.model.Track;
 import me.lucko.luckperms.common.model.User;
+import me.lucko.luckperms.common.node.MetaType;
 import me.lucko.luckperms.common.node.NodeFactory;
 import me.lucko.luckperms.common.node.NodeHeldPermission;
 import me.lucko.luckperms.common.node.NodeModel;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
 import me.lucko.luckperms.common.references.UserIdentifier;
 import me.lucko.luckperms.common.storage.dao.AbstractDao;
-import me.lucko.luckperms.common.storage.dao.legacy.LegacyJsonMigration;
-import me.lucko.luckperms.common.storage.dao.legacy.LegacyYamlMigration;
 import me.lucko.luckperms.common.utils.ImmutableCollectors;
 import me.lucko.luckperms.common.utils.Uuids;
 
@@ -65,7 +64,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Date;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -74,18 +72,12 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.logging.FileHandler;
-import java.util.logging.Formatter;
-import java.util.logging.Level;
-import java.util.logging.LogRecord;
-import java.util.logging.Logger;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public abstract class ConfigurateDao extends AbstractDao {
-    private static final String LOG_FORMAT = "%s(%s): [%s] %s(%s) --> %s";
-
-    private final Logger actionLogger = Logger.getLogger("luckperms_actions");
     private final FileUuidCache uuidCache = new FileUuidCache();
+    private final FileActionLogger actionLogger = new FileActionLogger();
 
     private final String fileExtension;
     private final String dataFolderName;
@@ -170,132 +162,59 @@ public abstract class ConfigurateDao extends AbstractDao {
     @Override
     public void init() {
         try {
-            setupFiles();
+            File data = FileUtils.mkdirs(new File(this.plugin.getDataDirectory(), this.dataFolderName));
+
+            this.usersDirectory = FileUtils.mkdir(new File(data, "users"));
+            this.groupsDirectory = FileUtils.mkdir(new File(data, "groups"));
+            this.tracksDirectory = FileUtils.mkdir(new File(data, "tracks"));
+            this.uuidDataFile = FileUtils.createNewFile(new File(data, "uuidcache.txt"));
+            this.actionLogFile = FileUtils.createNewFile(new File(data, "actions.log"));
+
+            // Listen for file changes.
+            this.plugin.getFileWatcher().ifPresent(watcher -> {
+                watcher.subscribe("user", this.usersDirectory.toPath(), s -> {
+                    if (!s.endsWith(this.fileExtension)) {
+                        return;
+                    }
+
+                    String user = s.substring(0, s.length() - this.fileExtension.length());
+                    UUID uuid = Uuids.parseNullable(user);
+                    if (uuid == null) {
+                        return;
+                    }
+
+                    User u = this.plugin.getUserManager().getIfLoaded(uuid);
+                    if (u != null) {
+                        this.plugin.getLog().info("[FileWatcher] Refreshing user " + u.getFriendlyName());
+                        this.plugin.getStorage().loadUser(uuid, null);
+                    }
+                });
+                watcher.subscribe("group", this.groupsDirectory.toPath(), s -> {
+                    if (!s.endsWith(this.fileExtension)) {
+                        return;
+                    }
+
+                    String groupName = s.substring(0, s.length() - this.fileExtension.length());
+                    this.plugin.getLog().info("[FileWatcher] Refreshing group " + groupName);
+                    this.plugin.getUpdateTaskBuffer().request();
+                });
+                watcher.subscribe("track", this.tracksDirectory.toPath(), s -> {
+                    if (!s.endsWith(this.fileExtension)) {
+                        return;
+                    }
+
+                    String trackName = s.substring(0, s.length() - this.fileExtension.length());
+                    this.plugin.getLog().info("[FileWatcher] Refreshing track " + trackName);
+                    this.plugin.getStorage().loadAllTracks();
+                });
+            });
         } catch (IOException e) {
             e.printStackTrace();
             return;
         }
 
         this.uuidCache.load(this.uuidDataFile);
-
-        try {
-            FileHandler fh = new FileHandler(this.actionLogFile.getAbsolutePath(), 0, 1, true);
-            fh.setFormatter(new Formatter() {
-                @Override
-                public String format(LogRecord record) {
-                    return new Date(record.getMillis()).toString() + ": " + record.getMessage() + "\n";
-                }
-            });
-            this.actionLogger.addHandler(fh);
-            this.actionLogger.setUseParentHandlers(false);
-            this.actionLogger.setLevel(Level.ALL);
-            this.actionLogger.setFilter(record -> true);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    private static void mkdir(File file) throws IOException {
-        if (file.exists()) {
-            return;
-        }
-        if (!file.mkdir()) {
-            throw new IOException("Unable to create directory - " + file.getPath());
-        }
-    }
-
-    private static void mkdirs(File file) throws IOException {
-        if (file.exists()) {
-            return;
-        }
-        if (!file.mkdirs()) {
-            throw new IOException("Unable to create directory - " + file.getPath());
-        }
-    }
-
-    private void setupFiles() throws IOException {
-        File data = new File(this.plugin.getDataDirectory(), this.dataFolderName);
-
-        // Try to perform schema migration
-        File oldData = new File(this.plugin.getDataDirectory(), "data");
-
-        if (!data.exists() && oldData.exists()) {
-            mkdirs(data);
-
-            this.plugin.getLog().severe("===== Legacy Schema Migration =====");
-            this.plugin.getLog().severe("Starting migration from legacy schema. This could take a while....");
-            this.plugin.getLog().severe("Please do not stop your server while the migration takes place.");
-
-            if (this instanceof YamlDao) {
-                try {
-                    new LegacyYamlMigration(this.plugin, (YamlDao) this, oldData, data).run();
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            } else if (this instanceof JsonDao) {
-                try {
-                    new LegacyJsonMigration(this.plugin, (JsonDao) this, oldData, data).run();
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            }
-        } else {
-            mkdirs(data);
-        }
-
-        this.usersDirectory = new File(data, "users");
-        mkdir(this.usersDirectory);
-
-        this.groupsDirectory = new File(data, "groups");
-        mkdir(this.groupsDirectory);
-
-        this.tracksDirectory = new File(data, "tracks");
-        mkdir(this.tracksDirectory);
-
-        this.uuidDataFile = new File(data, "uuidcache.txt");
-        this.uuidDataFile.createNewFile();
-
-        this.actionLogFile = new File(data, "actions.log");
-        this.actionLogFile.createNewFile();
-
-        // Listen for file changes.
-        this.plugin.getFileWatcher().ifPresent(watcher -> {
-            watcher.subscribe("user", this.usersDirectory.toPath(), s -> {
-                if (!s.endsWith(this.fileExtension)) {
-                    return;
-                }
-
-                String user = s.substring(0, s.length() - this.fileExtension.length());
-                UUID uuid = Uuids.parseNullable(user);
-                if (uuid == null) {
-                    return;
-                }
-
-                User u = this.plugin.getUserManager().getIfLoaded(uuid);
-                if (u != null) {
-                    this.plugin.getLog().info("[FileWatcher] Refreshing user " + u.getFriendlyName());
-                    this.plugin.getStorage().loadUser(uuid, null);
-                }
-            });
-            watcher.subscribe("group", this.groupsDirectory.toPath(), s -> {
-                if (!s.endsWith(this.fileExtension)) {
-                    return;
-                }
-
-                String groupName = s.substring(0, s.length() - this.fileExtension.length());
-                this.plugin.getLog().info("[FileWatcher] Refreshing group " + groupName);
-                this.plugin.getUpdateTaskBuffer().request();
-            });
-            watcher.subscribe("track", this.tracksDirectory.toPath(), s -> {
-                if (!s.endsWith(this.fileExtension)) {
-                    return;
-                }
-
-                String trackName = s.substring(0, s.length() - this.fileExtension.length());
-                this.plugin.getLog().info("[FileWatcher] Refreshing track " + trackName);
-                this.plugin.getStorage().loadAllTracks();
-            });
-        });
+        this.actionLogger.init(this.actionLogFile);
     }
 
     @Override
@@ -305,20 +224,14 @@ public abstract class ConfigurateDao extends AbstractDao {
 
     @Override
     public void logAction(LogEntry entry) {
-        this.actionLogger.info(String.format(LOG_FORMAT,
-                (entry.getActor().equals(CommandManager.CONSOLE_UUID) ? "" : entry.getActor() + " "),
-                entry.getActorName(),
-                Character.toString(entry.getType().getCode()),
-                entry.getActed().map(e -> e.toString() + " ").orElse(""),
-                entry.getActedName(),
-                entry.getAction())
-        );
+        this.actionLogger.logAction(entry);
     }
 
     @Override
     public Log getLog() {
-        // Flatfile doesn't support viewing log data from in-game. You can just read the file in a text editor.
-        return Log.builder().build();
+        // File based daos don't support viewing log data from in-game.
+        // You can just read the file in a text editor.
+        return Log.empty();
     }
 
     @Override
@@ -395,7 +308,7 @@ public abstract class ConfigurateDao extends AbstractDao {
                     save = true;
                 }
 
-                if (save) {
+                if (save | user.auditTemporaryPermissions()) {
                     saveUser(user);
                 }
             } else {
@@ -450,7 +363,7 @@ public abstract class ConfigurateDao extends AbstractDao {
 
     @Override
     public List<HeldPermission<UUID>> getUsersWithPermission(String permission) throws Exception {
-        ImmutableList.Builder<HeldPermission<UUID>> held = ImmutableList.builder();
+        List<HeldPermission<UUID>> held = new ArrayList<>();
         File[] files = getDirectory(StorageLocation.USER).listFiles(getFileTypeFilter());
         if (files == null) {
             throw new IllegalStateException("Users directory matched no files.");
@@ -472,7 +385,7 @@ public abstract class ConfigurateDao extends AbstractDao {
                 throw reportException(file.getName(), e);
             }
         }
-        return held.build();
+        return held;
     }
 
     @Override
@@ -605,7 +518,7 @@ public abstract class ConfigurateDao extends AbstractDao {
 
     @Override
     public List<HeldPermission<String>> getGroupsWithPermission(String permission) throws Exception {
-        ImmutableList.Builder<HeldPermission<String>> held = ImmutableList.builder();
+        List<HeldPermission<String>> held = new ArrayList<>();
         File[] files = getDirectory(StorageLocation.GROUP).listFiles(getFileTypeFilter());
         if (files == null) {
             throw new IllegalStateException("Groups directory matched no files.");
@@ -627,7 +540,7 @@ public abstract class ConfigurateDao extends AbstractDao {
                 throw reportException(file.getName(), e);
             }
         }
-        return held.build();
+        return held;
     }
 
     @Override
@@ -771,35 +684,35 @@ public abstract class ConfigurateDao extends AbstractDao {
         return this.uuidCache.lookupUsername(uuid);
     }
 
-    private static Collection<NodeModel> readAttributes(ConfigurationNode entry, String permission) {
-        Map<Object, ? extends ConfigurationNode> attributes = entry.getChildrenMap();
+    private static NodeModel readAttributes(ConfigurationNode attributes, Function<ConfigurationNode, String> permissionFunction) {
+        boolean value = attributes.getNode("value").getBoolean(true);
+        String server = attributes.getNode("server").getString("global");
+        String world = attributes.getNode("world").getString("global");
+        long expiry = attributes.getNode("expiry").getLong(0L);
 
-        boolean value = true;
-        String server = "global";
-        String world = "global";
-        long expiry = 0L;
         ImmutableContextSet context = ImmutableContextSet.empty();
-
-        if (attributes.containsKey("value")) {
-            value = attributes.get("value").getBoolean();
-        }
-        if (attributes.containsKey("server")) {
-            server = attributes.get("server").getString();
-        }
-        if (attributes.containsKey("world")) {
-            world = attributes.get("world").getString();
-        }
-        if (attributes.containsKey("expiry")) {
-            expiry = attributes.get("expiry").getLong();
+        ConfigurationNode contextMap = attributes.getNode("context");
+        if (!contextMap.isVirtual() && contextMap.hasMapChildren()) {
+            context = ContextSetConfigurateSerializer.deserializeContextSet(contextMap).makeImmutable();
         }
 
-        if (attributes.containsKey("context") && attributes.get("context").hasMapChildren()) {
-            ConfigurationNode contexts = attributes.get("context");
-            context = ContextSetConfigurateSerializer.deserializeContextSet(contexts).makeImmutable();
+        return NodeModel.of(permissionFunction.apply(attributes), value, server, world, expiry, context);
+    }
+
+    private static Collection<NodeModel> readAttributes(ConfigurationNode attributes, String permission) {
+        boolean value = attributes.getNode("value").getBoolean(true);
+        String server = attributes.getNode("server").getString("global");
+        String world = attributes.getNode("world").getString("global");
+        long expiry = attributes.getNode("expiry").getLong(0L);
+
+        ImmutableContextSet context = ImmutableContextSet.empty();
+        ConfigurationNode contextMap = attributes.getNode("context");
+        if (!contextMap.isVirtual() && contextMap.hasMapChildren()) {
+            context = ContextSetConfigurateSerializer.deserializeContextSet(contextMap).makeImmutable();
         }
 
-        ConfigurationNode batchAttribute = attributes.get("permissions");
-        if (permission.startsWith("luckperms.batch") && batchAttribute != null && batchAttribute.hasListChildren()) {
+        ConfigurationNode batchAttribute = attributes.getNode("permissions");
+        if (permission.startsWith("luckperms.batch") && !batchAttribute.isVirtual() && batchAttribute.hasListChildren()) {
             List<NodeModel> nodes = new ArrayList<>();
             for (ConfigurationNode element : batchAttribute.getChildrenList()) {
                 nodes.add(NodeModel.of(element.getString(), value, server, world, expiry, context));
@@ -810,63 +723,87 @@ public abstract class ConfigurateDao extends AbstractDao {
         }
     }
 
+    private static Map.Entry<String, ConfigurationNode> parseEntry(ConfigurationNode appended) {
+        if (!appended.hasMapChildren()) {
+            return null;
+        }
+        Map.Entry<Object, ? extends ConfigurationNode> entry = Iterables.getFirst(appended.getChildrenMap().entrySet(), null);
+        if (entry == null || !entry.getValue().hasMapChildren()) {
+            return null;
+        }
+
+        return Maps.immutableEntry(entry.getKey().toString(), entry.getValue());
+    }
+
     private static Set<NodeModel> readNodes(ConfigurationNode data) {
         Set<NodeModel> nodes = new HashSet<>();
 
         if (data.getNode("permissions").hasListChildren()) {
-            List<? extends ConfigurationNode> parts = data.getNode("permissions").getChildrenList();
-
-            for (ConfigurationNode ent : parts) {
-                String stringValue = ent.getValue(Types::strictAsString);
-                if (stringValue != null) {
-                    nodes.add(NodeModel.of(stringValue, true, "global", "global", 0L, ImmutableContextSet.empty()));
+            List<? extends ConfigurationNode> children = data.getNode("permissions").getChildrenList();
+            for (ConfigurationNode appended : children) {
+                String plainValue = appended.getValue(Types::strictAsString);
+                if (plainValue != null) {
+                    nodes.add(NodeModel.of(plainValue));
                     continue;
                 }
 
-                if (!ent.hasMapChildren()) {
+                Map.Entry<String, ConfigurationNode> entry = parseEntry(appended);
+                if (entry == null) {
                     continue;
                 }
-
-                Map.Entry<Object, ? extends ConfigurationNode> entry = Iterables.getFirst(ent.getChildrenMap().entrySet(), null);
-                if (entry == null || !entry.getValue().hasMapChildren()) {
-                    continue;
-                }
-
-                String permission = entry.getKey().toString();
-                nodes.addAll(readAttributes(entry.getValue(), permission));
+                nodes.addAll(readAttributes(entry.getValue(), entry.getKey()));
             }
         }
 
         if (data.getNode("parents").hasListChildren()) {
-            List<? extends ConfigurationNode> parts = data.getNode("parents").getChildrenList();
-
-            for (ConfigurationNode ent : parts) {
-                String stringValue = ent.getValue(Types::strictAsString);
+            List<? extends ConfigurationNode> children = data.getNode("parents").getChildrenList();
+            for (ConfigurationNode appended : children) {
+                String stringValue = appended.getValue(Types::strictAsString);
                 if (stringValue != null) {
-                    nodes.add(NodeModel.of(NodeFactory.groupNode(stringValue), true, "global", "global", 0L, ImmutableContextSet.empty()));
+                    nodes.add(NodeModel.of(NodeFactory.groupNode(stringValue)));
                     continue;
                 }
 
-                if (!ent.hasMapChildren()) {
+                Map.Entry<String, ConfigurationNode> entry = parseEntry(appended);
+                if (entry == null) {
                     continue;
                 }
+                nodes.add(readAttributes(entry.getValue(), c -> NodeFactory.groupNode(entry.getKey())));
+            }
+        }
 
-                Map.Entry<Object, ? extends ConfigurationNode> entry = Iterables.getFirst(ent.getChildrenMap().entrySet(), null);
-                if (entry == null || !entry.getValue().hasMapChildren()) {
+        for (ChatMetaType chatMetaType : ChatMetaType.values()) {
+            String keyName = chatMetaType.toString() + "es";
+            if (data.getNode(keyName).hasListChildren()) {
+                List<? extends ConfigurationNode> children = data.getNode(keyName).getChildrenList();
+                for (ConfigurationNode appended : children) {
+                    Map.Entry<String, ConfigurationNode> entry = parseEntry(appended);
+                    if (entry == null) {
+                        continue;
+                    }
+                    nodes.add(readAttributes(entry.getValue(), c -> NodeFactory.chatMetaNode(chatMetaType, c.getNode("priority").getInt(0), entry.getKey())));
+                }
+            }
+        }
+
+        if (data.getNode("meta").hasListChildren()) {
+            List<? extends ConfigurationNode> children = data.getNode("meta").getChildrenList();
+            for (ConfigurationNode appended : children) {
+                Map.Entry<String, ConfigurationNode> entry = parseEntry(appended);
+                if (entry == null) {
                     continue;
                 }
-
-                String permission = NodeFactory.groupNode(entry.getKey().toString());
-                nodes.addAll(readAttributes(entry.getValue(), permission));
+                nodes.add(readAttributes(entry.getValue(), c -> NodeFactory.metaNode(entry.getKey(), entry.getValue().getNode("value").getString("null"))));
             }
         }
 
         return nodes;
     }
 
-    private static ConfigurationNode writeAttributes(NodeModel node) {
-        ConfigurationNode attributes = SimpleConfigurationNode.root();
-        attributes.getNode("value").setValue(node.getValue());
+    private static void writeAttributesTo(ConfigurationNode attributes, NodeModel node, boolean writeValue) {
+        if (writeValue) {
+            attributes.getNode("value").setValue(node.getValue());
+        }
 
         if (!node.getServer().equals("global")) {
             attributes.getNode("server").setValue(node.getServer());
@@ -883,52 +820,108 @@ public abstract class ConfigurateDao extends AbstractDao {
         if (!node.getContexts().isEmpty()) {
             attributes.getNode("context").setValue(ContextSetConfigurateSerializer.serializeContextSet(node.getContexts()));
         }
+    }
 
-        return attributes;
+    private static boolean isPlain(NodeModel node) {
+        return node.getValue() &&
+                node.getServer().equalsIgnoreCase("global") &&
+                node.getWorld().equalsIgnoreCase("global") &&
+                node.getExpiry() == 0L &&
+                node.getContexts().isEmpty();
     }
 
     private static void writeNodes(ConfigurationNode to, Set<NodeModel> nodes) {
-        ConfigurationNode permsSection = SimpleConfigurationNode.root();
+        ConfigurationNode permissionsSection = SimpleConfigurationNode.root();
         ConfigurationNode parentsSection = SimpleConfigurationNode.root();
+        ConfigurationNode prefixesSection = SimpleConfigurationNode.root();
+        ConfigurationNode suffixesSection = SimpleConfigurationNode.root();
+        ConfigurationNode metaSection = SimpleConfigurationNode.root();
 
         for (NodeModel node : nodes) {
-
-            // just a raw, default node.
-            boolean single = node.getValue() &&
-                    node.getServer().equalsIgnoreCase("global") &&
-                    node.getWorld().equalsIgnoreCase("global") &&
-                    node.getExpiry() == 0L &&
-                    node.getContexts().isEmpty();
-
-            // try to parse out the group
-            String group = node.toNode().isGroupNode() ? node.toNode().getGroupName() : null;
+            Node n = node.toNode();
 
             // just add a string to the list.
-            if (single) {
-
-                if (group != null) {
-                    parentsSection.getAppendedNode().setValue(group);
+            if (isPlain(node)) {
+                if (n.isGroupNode()) {
+                    parentsSection.getAppendedNode().setValue(n.getGroupName());
                     continue;
                 }
-
-                permsSection.getAppendedNode().setValue(node.getPermission());
-                continue;
+                if (!MetaType.ANY.matches(n)) {
+                    permissionsSection.getAppendedNode().setValue(node.getPermission());
+                    continue;
+                }
             }
 
-            if (group != null) {
-                ConfigurationNode ent = SimpleConfigurationNode.root();
-                ent.getNode(group).setValue(writeAttributes(node));
-                parentsSection.getAppendedNode().setValue(ent);
-                continue;
-            }
+            ChatMetaType chatMetaType = ChatMetaType.ofNode(n).orElse(null);
+            if (chatMetaType != null && n.getValuePrimitive()) {
+                // handle prefixes / suffixes
+                Map.Entry<Integer, String> entry = chatMetaType.getEntry(n);
 
-            ConfigurationNode ent = SimpleConfigurationNode.root();
-            ent.getNode(node.getPermission()).setValue(writeAttributes(node));
-            permsSection.getAppendedNode().setValue(ent);
+                ConfigurationNode attributes = SimpleConfigurationNode.root();
+                attributes.getNode("priority").setValue(entry.getKey());
+                writeAttributesTo(attributes, node, false);
+
+                ConfigurationNode appended = SimpleConfigurationNode.root();
+                appended.getNode(entry.getValue()).setValue(attributes);
+
+                switch (chatMetaType) {
+                    case PREFIX:
+                        prefixesSection.getAppendedNode().setValue(appended);
+                        break;
+                    case SUFFIX:
+                        suffixesSection.getAppendedNode().setValue(appended);
+                        break;
+                    default:
+                        throw new AssertionError();
+                }
+            } else if (n.isMeta() && n.getValuePrimitive()) {
+                // handle meta nodes
+                Map.Entry<String, String> meta = n.getMeta();
+
+                ConfigurationNode attributes = SimpleConfigurationNode.root();
+                attributes.getNode("value").setValue(meta.getValue());
+                writeAttributesTo(attributes, node, false);
+
+                ConfigurationNode appended = SimpleConfigurationNode.root();
+                appended.getNode(meta.getKey()).setValue(attributes);
+
+                metaSection.getAppendedNode().setValue(appended);
+            } else if (n.isGroupNode() && n.getValuePrimitive()) {
+                // handle group nodes
+                ConfigurationNode attributes = SimpleConfigurationNode.root();
+                writeAttributesTo(attributes, node, false);
+
+                ConfigurationNode appended = SimpleConfigurationNode.root();
+                appended.getNode(n.getGroupName()).setValue(attributes);
+
+                parentsSection.getAppendedNode().setValue(appended);
+            } else {
+                // handle regular permissions and negated meta+prefixes+suffixes
+                ConfigurationNode attributes = SimpleConfigurationNode.root();
+                writeAttributesTo(attributes, node, true);
+
+                ConfigurationNode appended = SimpleConfigurationNode.root();
+                appended.getNode(n.getPermission()).setValue(attributes);
+
+                permissionsSection.getAppendedNode().setValue(appended);
+            }
         }
 
-        to.getNode("permissions").setValue(permsSection);
-        to.getNode("parents").setValue(parentsSection);
+        if (permissionsSection.hasListChildren()) {
+            to.getNode("permissions").setValue(permissionsSection);
+        }
+        if (parentsSection.hasListChildren()) {
+            to.getNode("parents").setValue(parentsSection);
+        }
+        if (prefixesSection.hasListChildren()) {
+            to.getNode("prefixes").setValue(prefixesSection);
+        }
+        if (suffixesSection.hasListChildren()) {
+            to.getNode("suffixes").setValue(suffixesSection);
+        }
+        if (metaSection.hasListChildren()) {
+            to.getNode("meta").setValue(metaSection);
+        }
     }
 
 }

@@ -41,6 +41,7 @@ import me.lucko.luckperms.common.contexts.ContextManager;
 import me.lucko.luckperms.common.dependencies.DependencyManager;
 import me.lucko.luckperms.common.dependencies.classloader.PluginClassLoader;
 import me.lucko.luckperms.common.event.EventFactory;
+import me.lucko.luckperms.common.inheritance.InheritanceHandler;
 import me.lucko.luckperms.common.locale.LocaleManager;
 import me.lucko.luckperms.common.logging.Logger;
 import me.lucko.luckperms.common.managers.group.GroupManager;
@@ -61,8 +62,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
-
-import javax.annotation.Nullable;
 
 /**
  * Main internal interface for LuckPerms plugins, providing the base for
@@ -177,6 +176,13 @@ public interface LuckPermsPlugin {
      * @return the context manager
      */
     ContextManager<?> getContextManager();
+
+    /**
+     * Gets the inheritance handler
+     *
+     * @return the inheritance handler
+     */
+    InheritanceHandler getInheritanceHandler();
 
     /**
      * Gets the cached state manager for the platform.
@@ -324,8 +330,7 @@ public interface LuckPermsPlugin {
      * @param user the user instance
      * @return a contexts object, or null if one couldn't be generated
      */
-    @Nullable
-    Contexts getContextForUser(User user);
+    Optional<Contexts> getContextForUser(User user);
 
     /**
      * Gets the number of users online on the platform

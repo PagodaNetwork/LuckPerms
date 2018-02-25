@@ -6,7 +6,7 @@
 
     <groupId>me.lucko.luckperms</groupId>
     <artifactId>luckperms</artifactId>
-    <version>4.0-SNAPSHOT</version>
+    <version>4.1-SNAPSHOT</version>
 
     <modules>
         <module>api</module>
@@ -16,7 +16,12 @@
         <!--<module>sponge/sponge-service</module>
         <module>sponge/sponge-service-api6</module>
         <module>sponge/sponge-service-api7</module>
+<<<<<<< HEAD
         <module>sponge</module>-->
+=======
+        <module>sponge</module>
+        <module>nukkit</module>
+>>>>>>> aa4833ed740e97851c1bf38f5a35f8340d199f36
     </modules>
 
     <name>LuckPerms</name>
@@ -54,7 +59,7 @@
         <maven.test.skip>true</maven.test.skip>
 
         <!-- Manually entered release version -->
-        <release.version>4.0</release.version>
+        <release.version>4.1</release.version>
 
         <!-- Get how many commits have been made since the last tag (the previous release) -->
         <patch.version>${git.closest.tag.commit.count}</patch.version>
@@ -151,14 +156,6 @@
         <repository>
             <id>luck-repo</id>
             <url>https://repo.lucko.me/</url>
-        </repository>
-        <repository>
-            <id>spigot-repo</id>
-            <url>https://hub.spigotmc.org/nexus/content/repositories/snapshots/</url>
-        </repository>
-        <repository>
-            <id>sponge-repo</id>
-            <url>https://repo.spongepowered.org/maven</url>
         </repository>
     </repositories>
 

@@ -32,7 +32,7 @@ import net.md_5.bungee.api.ProxyServer;
 import net.md_5.bungee.api.plugin.Event;
 
 /**
- * Copy of the internal BungeeCord "PermissionCheckEvent", returning a tristate instead of a boolean.
+ * Copy of the internal BungeeCord PermissionCheckEvent, returning a tristate instead of a boolean.
  */
 public class TristateCheckEvent extends Event {
     public static Tristate call(CommandSender sender, String permission) {

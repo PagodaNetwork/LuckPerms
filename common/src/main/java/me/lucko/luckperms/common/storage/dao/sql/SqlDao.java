@@ -25,7 +25,6 @@
 
 package me.lucko.luckperms.common.storage.dao.sql;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
@@ -48,7 +47,6 @@ import me.lucko.luckperms.common.node.NodeModel;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
 import me.lucko.luckperms.common.references.UserIdentifier;
 import me.lucko.luckperms.common.storage.dao.AbstractDao;
-import me.lucko.luckperms.common.storage.dao.legacy.LegacySqlMigration;
 import me.lucko.luckperms.common.storage.dao.sql.connection.AbstractConnectionFactory;
 import me.lucko.luckperms.common.storage.dao.sql.connection.file.SQLiteConnectionFactory;
 import me.lucko.luckperms.common.storage.dao.sql.connection.hikari.PostgreConnectionFactory;
@@ -116,11 +114,8 @@ public class SqlDao extends AbstractDao {
     private static final String ACTION_INSERT = "INSERT INTO {prefix}actions(time, actor_uuid, actor_name, type, acted_uuid, acted_name, action) VALUES(?, ?, ?, ?, ?, ?, ?)";
     private static final String ACTION_SELECT_ALL = "SELECT * FROM {prefix}actions";
 
-
     private final Gson gson;
-
     private final AbstractConnectionFactory provider;
-
     private final Function<String, String> prefix;
 
     public SqlDao(LuckPermsPlugin plugin, AbstractConnectionFactory provider, String prefix) {
@@ -132,10 +127,6 @@ public class SqlDao extends AbstractDao {
 
     public Gson getGson() {
         return this.gson;
-    }
-
-    public AbstractConnectionFactory getProvider() {
-        return this.provider;
     }
 
     public Function<String, String> getPrefix() {
@@ -194,26 +185,22 @@ public class SqlDao extends AbstractDao {
                         }
                     }
                 }
-
-                // Try migration from legacy backing
-                if (tableExists("lp_users")) {
-                    this.plugin.getLog().severe("===== Legacy Schema Migration =====");
-                    this.plugin.getLog().severe("Starting migration from legacy schema. This could take a while....");
-                    this.plugin.getLog().severe("Please do not stop your server while the migration takes place.");
-
-                    new LegacySqlMigration(this).run();
-                }
             }
 
             // migrations
-            if (!(this.provider instanceof SQLiteConnectionFactory) && !(this.provider instanceof PostgreConnectionFactory)) {
-                try (Connection connection = this.provider.getConnection()) {
-                    try (Statement s = connection.createStatement()) {
-                        s.execute(this.prefix.apply("ALTER TABLE {prefix}actions MODIFY COLUMN actor_name VARCHAR(100)"));
-                        s.execute(this.prefix.apply("ALTER TABLE {prefix}actions MODIFY COLUMN action VARCHAR(300)"));
+            try {
+                if (!(this.provider instanceof SQLiteConnectionFactory) && !(this.provider instanceof PostgreConnectionFactory)) {
+                    try (Connection connection = this.provider.getConnection()) {
+                        try (Statement s = connection.createStatement()) {
+                            s.execute(this.prefix.apply("ALTER TABLE {prefix}actions MODIFY COLUMN actor_name VARCHAR(100)"));
+                            s.execute(this.prefix.apply("ALTER TABLE {prefix}actions MODIFY COLUMN action VARCHAR(300)"));
+                        }
                     }
                 }
+            } catch (Exception e) {
+                e.printStackTrace();
             }
+
 
         } catch (Exception e) {
             this.plugin.getLog().severe("Error occurred whilst initialising the database.");
@@ -355,8 +342,8 @@ public class SqlDao extends AbstractDao {
                 Set<Node> nodes = data.stream().map(NodeModel::toNode).collect(Collectors.toSet());
                 user.setEnduringNodes(nodes);
 
-                // Save back to the store if data was changed
-                if (this.plugin.getUserManager().giveDefaultIfNeeded(user, false)) {
+                // Save back to the store if data they were given any defaults or had permissions expire
+                if (this.plugin.getUserManager().giveDefaultIfNeeded(user, false) | user.auditTemporaryPermissions()) {
                     // This should be fine, as the lock will be acquired by the same thread.
                     saveUser(user);
                 }
@@ -510,7 +497,7 @@ public class SqlDao extends AbstractDao {
 
     @Override
     public List<HeldPermission<UUID>> getUsersWithPermission(String permission) throws SQLException {
-        ImmutableList.Builder<HeldPermission<UUID>> held = ImmutableList.builder();
+        List<HeldPermission<UUID>> held = new ArrayList<>();
         try (Connection c = this.provider.getConnection()) {
             try (PreparedStatement ps = c.prepareStatement(this.prefix.apply(USER_PERMISSIONS_SELECT_PERMISSION))) {
                 ps.setString(1, permission);
@@ -529,7 +516,7 @@ public class SqlDao extends AbstractDao {
                 }
             }
         }
-        return held.build();
+        return held;
     }
 
     @Override
@@ -754,7 +741,7 @@ public class SqlDao extends AbstractDao {
 
     @Override
     public List<HeldPermission<String>> getGroupsWithPermission(String permission) throws SQLException {
-        ImmutableList.Builder<HeldPermission<String>> held = ImmutableList.builder();
+        List<HeldPermission<String>> held = new ArrayList<>();
         try (Connection c = this.provider.getConnection()) {
             try (PreparedStatement ps = c.prepareStatement(this.prefix.apply(GROUP_PERMISSIONS_SELECT_PERMISSION))) {
                 ps.setString(1, permission);
@@ -773,7 +760,7 @@ public class SqlDao extends AbstractDao {
                 }
             }
         }
-        return held.build();
+        return held;
     }
 
     @Override
