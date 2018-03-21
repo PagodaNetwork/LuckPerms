@@ -13,15 +13,11 @@
         <module>common</module>
         <module>bukkit</module>
         <module>bungee</module>
-        <!--<module>sponge/sponge-service</module>
+        <module>sponge/sponge-service</module>
         <module>sponge/sponge-service-api6</module>
         <module>sponge/sponge-service-api7</module>
-<<<<<<< HEAD
-        <module>sponge</module>-->
-=======
         <module>sponge</module>
         <module>nukkit</module>
->>>>>>> aa4833ed740e97851c1bf38f5a35f8340d199f36
     </modules>
 
     <name>LuckPerms</name>
