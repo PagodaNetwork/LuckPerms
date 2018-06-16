@@ -29,8 +29,10 @@ import com.google.common.collect.ImmutableMap;
 
 import me.lucko.luckperms.api.HeldPermission;
 import me.lucko.luckperms.api.LogEntry;
+import me.lucko.luckperms.api.PlayerSaveResult;
 import me.lucko.luckperms.common.actionlog.Log;
 import me.lucko.luckperms.common.bulkupdate.BulkUpdate;
+import me.lucko.luckperms.common.bulkupdate.comparisons.Constraint;
 import me.lucko.luckperms.common.model.Group;
 import me.lucko.luckperms.common.model.Track;
 import me.lucko.luckperms.common.model.User;
@@ -67,7 +69,7 @@ public class SplitStorageDao extends AbstractDao {
             }
         }
         if (failed) {
-            throw new RuntimeException("One of the backing failed to init");
+            throw new RuntimeException("One of the backings failed to init");
         }
     }
 
@@ -131,8 +133,8 @@ public class SplitStorageDao extends AbstractDao {
     }
 
     @Override
-    public List<HeldPermission<UUID>> getUsersWithPermission(String permission) throws Exception {
-        return this.backing.get(this.types.get(SplitStorageType.USER)).getUsersWithPermission(permission);
+    public List<HeldPermission<UUID>> getUsersWithPermission(Constraint constraint) throws Exception {
+        return this.backing.get(this.types.get(SplitStorageType.USER)).getUsersWithPermission(constraint);
     }
 
     @Override
@@ -161,8 +163,8 @@ public class SplitStorageDao extends AbstractDao {
     }
 
     @Override
-    public List<HeldPermission<String>> getGroupsWithPermission(String permission) throws Exception {
-        return this.backing.get(this.types.get(SplitStorageType.GROUP)).getGroupsWithPermission(permission);
+    public List<HeldPermission<String>> getGroupsWithPermission(Constraint constraint) throws Exception {
+        return this.backing.get(this.types.get(SplitStorageType.GROUP)).getGroupsWithPermission(constraint);
     }
 
     @Override
@@ -191,17 +193,17 @@ public class SplitStorageDao extends AbstractDao {
     }
 
     @Override
-    public void saveUUIDData(UUID uuid, String username) throws Exception {
-        this.backing.get(this.types.get(SplitStorageType.UUID)).saveUUIDData(uuid, username);
+    public PlayerSaveResult savePlayerData(UUID uuid, String username) throws Exception {
+        return this.backing.get(this.types.get(SplitStorageType.UUID)).savePlayerData(uuid, username);
     }
 
     @Override
-    public UUID getUUID(String username) throws Exception {
-        return this.backing.get(this.types.get(SplitStorageType.UUID)).getUUID(username);
+    public UUID getPlayerUuid(String username) throws Exception {
+        return this.backing.get(this.types.get(SplitStorageType.UUID)).getPlayerUuid(username);
     }
 
     @Override
-    public String getName(UUID uuid) throws Exception {
-        return this.backing.get(this.types.get(SplitStorageType.UUID)).getName(uuid);
+    public String getPlayerName(UUID uuid) throws Exception {
+        return this.backing.get(this.types.get(SplitStorageType.UUID)).getPlayerName(uuid);
     }
 }

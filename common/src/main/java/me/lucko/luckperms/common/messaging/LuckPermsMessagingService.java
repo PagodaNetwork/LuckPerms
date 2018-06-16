@@ -47,13 +47,14 @@ import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 import javax.annotation.Nonnull;
 
 public class LuckPermsMessagingService implements InternalMessagingService, IncomingMessageConsumer {
     private final LuckPermsPlugin plugin;
     private final Set<UUID> receivedMessages;
-    private final BufferedRequest<Void> updateBuffer;
+    private final PushUpdateBuffer updateBuffer;
 
     private final MessengerProvider messengerProvider;
     private final Messenger messenger;
@@ -102,32 +103,32 @@ public class LuckPermsMessagingService implements InternalMessagingService, Inco
 
     @Override
     public void pushUpdate() {
-        this.plugin.getScheduler().doAsync(() -> {
+        this.plugin.getBootstrap().getScheduler().executeAsync(() -> {
             UUID requestId = generatePingId();
-            this.plugin.getLog().info("[" + getName() + " Messaging] Sending ping with id: " + requestId);
+            this.plugin.getLogger().info("[" + getName() + " Messaging] Sending ping with id: " + requestId);
             this.messenger.sendOutgoingMessage(new UpdateMessageImpl(requestId));
         });
     }
 
     @Override
     public void pushUserUpdate(User user) {
-        this.plugin.getScheduler().doAsync(() -> {
+        this.plugin.getBootstrap().getScheduler().executeAsync(() -> {
             UUID requestId = generatePingId();
-            this.plugin.getLog().info("[" + getName() + " Messaging] Sending user ping for '" + user.getFriendlyName() + "' with id: " + requestId);
+            this.plugin.getLogger().info("[" + getName() + " Messaging] Sending user ping for '" + user.getFriendlyName() + "' with id: " + requestId);
             this.messenger.sendOutgoingMessage(new UserUpdateMessageImpl(requestId, user.getUuid()));
         });
     }
 
     @Override
     public void pushLog(LogEntry logEntry) {
-        this.plugin.getScheduler().doAsync(() -> {
+        this.plugin.getBootstrap().getScheduler().executeAsync(() -> {
             UUID requestId = generatePingId();
 
             if (this.plugin.getEventFactory().handleLogNetworkPublish(!this.plugin.getConfiguration().get(ConfigKeys.PUSH_LOG_ENTRIES), requestId, logEntry)) {
                 return;
             }
 
-            this.plugin.getLog().info("[" + getName() + " Messaging] Sending log with id: " + requestId);
+            this.plugin.getLogger().info("[" + getName() + " Messaging] Sending log with id: " + requestId);
             this.messenger.sendOutgoingMessage(new LogMessageImpl(requestId, logEntry));
         });
     }
@@ -142,7 +143,7 @@ public class LuckPermsMessagingService implements InternalMessagingService, Inco
                 return false;
             }
 
-            this.plugin.getLog().info("[" + getName() + " Messaging] Received update ping with id: " + msg.getId());
+            this.plugin.getLogger().info("[" + getName() + " Messaging] Received update ping with id: " + msg.getId());
 
             if (this.plugin.getEventFactory().handleNetworkPreSync(false, msg.getId())) {
                 return true;
@@ -162,7 +163,7 @@ public class LuckPermsMessagingService implements InternalMessagingService, Inco
                 return true;
             }
 
-            this.plugin.getLog().info("[" + getName() + " Messaging] Received user update ping for '" + user.getFriendlyName() + "' with id: " + msg.getId());
+            this.plugin.getLogger().info("[" + getName() + " Messaging] Received user update ping for '" + user.getFriendlyName() + "' with id: " + msg.getId());
 
             if (this.plugin.getEventFactory().handleNetworkPreSync(false, msg.getId())) {
                 return true;
@@ -182,7 +183,7 @@ public class LuckPermsMessagingService implements InternalMessagingService, Inco
             return true;
 
         } else {
-            this.plugin.getLog().warn("Unable to decode incoming message: " + message + " (" + message.getClass().getName() + ")");
+            this.plugin.getLogger().warn("Unable to decode incoming message: " + message + " (" + message.getClass().getName() + ")");
             return false;
         }
     }
@@ -207,7 +208,7 @@ public class LuckPermsMessagingService implements InternalMessagingService, Inco
 
     private final class PushUpdateBuffer extends BufferedRequest<Void> {
         public PushUpdateBuffer(LuckPermsPlugin plugin) {
-            super(2000L, 200L, plugin.getScheduler().async());
+            super(2, TimeUnit.SECONDS, plugin.getBootstrap().getScheduler());
         }
 
         @Override

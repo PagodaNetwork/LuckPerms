@@ -5,7 +5,7 @@
     <parent>
         <artifactId>luckperms</artifactId>
         <groupId>me.lucko.luckperms</groupId>
-        <version>4.1-SNAPSHOT</version>
+        <version>4.2-SNAPSHOT</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
@@ -41,7 +41,7 @@
             <groupId>com.google.code.findbugs</groupId>
             <artifactId>jsr305</artifactId>
             <version>3.0.2</version>
-            <scope>provided</scope>
+            <scope>compile</scope>
         </dependency>
 
         <!-- text -->
@@ -76,43 +76,37 @@
             <groupId>com.google.code.gson</groupId>
             <artifactId>gson</artifactId>
             <version>2.7</version>
-            <scope>provided</scope>
         </dependency>
         <!-- guava -->
         <dependency>
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
             <version>19.0</version>
-            <scope>provided</scope>
         </dependency>
         <!-- caffeine -->
         <dependency>
             <groupId>com.github.ben-manes.caffeine</groupId>
             <artifactId>caffeine</artifactId>
             <version>2.6.2</version>
-            <scope>provided</scope>
         </dependency>
         <!-- okhttp -->
         <dependency>
             <groupId>com.squareup.okhttp3</groupId>
             <artifactId>okhttp</artifactId>
-            <version>3.9.1</version>
-            <scope>provided</scope>
+            <version>3.10.0</version>
         </dependency>
         <!-- okio -->
         <dependency>
             <groupId>com.squareup.okio</groupId>
             <artifactId>okio</artifactId>
-            <version>1.13.0</version>
-            <scope>provided</scope>
+            <version>1.14.1</version>
         </dependency>
 
         <!-- configurate -->
         <dependency>
-            <groupId>ninja.leaping.configurate</groupId>
+            <groupId>me.lucko.configurate</groupId>
             <artifactId>configurate-core</artifactId>
-            <version>3.3</version>
-            <scope>provided</scope>
+            <version>3.5</version>
             <exclusions>
                 <exclusion>
                     <groupId>com.google.guava</groupId>
@@ -122,10 +116,9 @@
         </dependency>
         <!-- configurate yaml -->
         <dependency>
-            <groupId>ninja.leaping.configurate</groupId>
+            <groupId>me.lucko.configurate</groupId>
             <artifactId>configurate-yaml</artifactId>
-            <version>3.3</version>
-            <scope>provided</scope>
+            <version>3.5</version>
             <exclusions>
                 <exclusion>
                     <groupId>org.yaml</groupId>
@@ -135,10 +128,9 @@
         </dependency>
         <!-- configurate gson -->
         <dependency>
-            <groupId>ninja.leaping.configurate</groupId>
+            <groupId>me.lucko.configurate</groupId>
             <artifactId>configurate-gson</artifactId>
-            <version>3.3</version>
-            <scope>provided</scope>
+            <version>3.5</version>
             <exclusions>
                 <exclusion>
                     <groupId>com.google.code.gson</groupId>
@@ -148,38 +140,45 @@
         </dependency>
         <!-- configurate hocon -->
         <dependency>
-            <groupId>ninja.leaping.configurate</groupId>
+            <groupId>me.lucko.configurate</groupId>
             <artifactId>configurate-hocon</artifactId>
-            <version>3.3</version>
-            <scope>provided</scope>
+            <version>3.5</version>
+        </dependency>
+        <!-- configurate toml -->
+        <dependency>
+            <groupId>me.lucko.configurate</groupId>
+            <artifactId>configurate-toml</artifactId>
+            <version>3.5</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.moandjiezana.toml</groupId>
+                    <artifactId>toml4j</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <!-- HikariCP -->
         <dependency>
             <groupId>com.zaxxer</groupId>
             <artifactId>HikariCP</artifactId>
-            <version>2.7.8</version>
-            <scope>provided</scope>
+            <version>3.2.0</version>
         </dependency>
         <!-- Jedis -->
         <dependency>
             <groupId>redis.clients</groupId>
             <artifactId>jedis</artifactId>
             <version>2.9.0</version>
-            <scope>provided</scope>
         </dependency>
         <!-- MongoDB -->
         <dependency>
             <groupId>org.mongodb</groupId>
             <artifactId>mongo-java-driver</artifactId>
-            <version>3.6.1</version>
-            <scope>provided</scope>
+            <version>3.7.1</version>
         </dependency>
         <!-- SnakeYAML -->
         <dependency>
             <groupId>org.yaml</groupId>
             <artifactId>snakeyaml</artifactId>
             <version>1.14</version>
-            <scope>provided</scope>
         </dependency>
     </dependencies>
 

@@ -32,9 +32,12 @@ import me.lucko.luckperms.common.config.ConfigKeys;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
 import me.lucko.luckperms.common.storage.dao.AbstractDao;
 import me.lucko.luckperms.common.storage.dao.SplitStorageDao;
-import me.lucko.luckperms.common.storage.dao.file.HoconDao;
-import me.lucko.luckperms.common.storage.dao.file.JsonDao;
-import me.lucko.luckperms.common.storage.dao.file.YamlDao;
+import me.lucko.luckperms.common.storage.dao.file.CombinedConfigurateDao;
+import me.lucko.luckperms.common.storage.dao.file.SeparatedConfigurateDao;
+import me.lucko.luckperms.common.storage.dao.file.loader.HoconLoader;
+import me.lucko.luckperms.common.storage.dao.file.loader.JsonLoader;
+import me.lucko.luckperms.common.storage.dao.file.loader.TomlLoader;
+import me.lucko.luckperms.common.storage.dao.file.loader.YamlLoader;
 import me.lucko.luckperms.common.storage.dao.mongodb.MongoDao;
 import me.lucko.luckperms.common.storage.dao.sql.SqlDao;
 import me.lucko.luckperms.common.storage.dao.sql.connection.file.H2ConnectionFactory;
@@ -45,7 +48,6 @@ import me.lucko.luckperms.common.storage.dao.sql.connection.hikari.PostgreConnec
 import me.lucko.luckperms.common.storage.provider.StorageProviders;
 import me.lucko.luckperms.common.utils.ImmutableCollectors;
 
-import java.io.File;
 import java.util.Map;
 import java.util.Set;
 
@@ -62,7 +64,7 @@ public class StorageFactory {
                     .map(e -> {
                         StorageType type = StorageType.parse(e.getValue());
                         if (type == null) {
-                            this.plugin.getLog().severe("Storage method for " + e.getKey() + " - " + e.getValue() + " not recognised. " +
+                            this.plugin.getLogger().severe("Storage method for " + e.getKey() + " - " + e.getValue() + " not recognised. " +
                                     "Using the default instead.");
                             type = defaultMethod;
                         }
@@ -73,7 +75,7 @@ public class StorageFactory {
             String method = this.plugin.getConfiguration().get(ConfigKeys.STORAGE_METHOD);
             StorageType type = StorageType.parse(method);
             if (type == null) {
-                this.plugin.getLog().severe("Storage method '" + method + "' not recognised. Using the default instead.");
+                this.plugin.getLogger().severe("Storage method '" + method + "' not recognised. Using the default instead.");
                 type = defaultMethod;
             }
             return ImmutableSet.of(type);
@@ -83,7 +85,7 @@ public class StorageFactory {
     public Storage getInstance(StorageType defaultMethod) {
         Storage storage;
         if (this.plugin.getConfiguration().get(ConfigKeys.SPLIT_STORAGE)) {
-            this.plugin.getLog().info("Loading storage provider... [SPLIT STORAGE]");
+            this.plugin.getLogger().info("Loading storage provider... [SPLIT STORAGE]");
 
             Map<SplitStorageType, StorageType> mappedTypes = this.plugin.getConfiguration().get(ConfigKeys.SPLIT_STORAGE_OPTIONS).entrySet().stream()
                     .map(e -> {
@@ -108,7 +110,7 @@ public class StorageFactory {
                 type = defaultMethod;
             }
 
-            this.plugin.getLog().info("Loading storage provider... [" + type.name() + "]");
+            this.plugin.getLogger().info("Loading storage provider... [" + type.name() + "]");
             storage = makeInstance(type);
         }
 
@@ -139,13 +141,13 @@ public class StorageFactory {
             case SQLITE:
                 return new SqlDao(
                         this.plugin,
-                        new SQLiteConnectionFactory(this.plugin, new File(this.plugin.getDataDirectory(), "luckperms-sqlite.db")),
+                        new SQLiteConnectionFactory(this.plugin, this.plugin.getBootstrap().getDataDirectory().resolve("luckperms-sqlite.db")),
                         this.plugin.getConfiguration().get(ConfigKeys.SQL_TABLE_PREFIX)
                 );
             case H2:
                 return new SqlDao(
                         this.plugin,
-                        new H2ConnectionFactory(this.plugin, new File(this.plugin.getDataDirectory(), "luckperms-h2")),
+                        new H2ConnectionFactory(this.plugin, this.plugin.getBootstrap().getDataDirectory().resolve("luckperms-h2")),
                         this.plugin.getConfiguration().get(ConfigKeys.SQL_TABLE_PREFIX)
                 );
             case POSTGRESQL:
@@ -162,11 +164,23 @@ public class StorageFactory {
                         this.plugin.getConfiguration().get(ConfigKeys.MONGODB_CONNECTION_URI)
                 );
             case YAML:
-                return new YamlDao(this.plugin, "yaml-storage");
+                return new SeparatedConfigurateDao(this.plugin, new YamlLoader(), "YAML", ".yml", "yaml-storage");
+            case JSON:
+                return new SeparatedConfigurateDao(this.plugin, new JsonLoader(), "JSON", ".json", "json-storage");
             case HOCON:
-                return new HoconDao(this.plugin, "hocon-storage");
+                return new SeparatedConfigurateDao(this.plugin, new HoconLoader(), "HOCON", ".conf", "hocon-storage");
+            case TOML:
+                return new SeparatedConfigurateDao(this.plugin, new TomlLoader(), "TOML", ".toml", "toml-storage");
+            case YAML_COMBINED:
+                return new CombinedConfigurateDao(this.plugin, new YamlLoader(), "YAML Combined", ".yml", "yaml-storage");
+            case JSON_COMBINED:
+                return new CombinedConfigurateDao(this.plugin, new JsonLoader(), "JSON Combined", ".json", "json-storage");
+            case HOCON_COMBINED:
+                return new CombinedConfigurateDao(this.plugin, new HoconLoader(), "HOCON Combined", ".conf", "hocon-storage");
+            case TOML_COMBINED:
+                return new CombinedConfigurateDao(this.plugin, new TomlLoader(), "TOML Combined", ".toml", "toml-storage");
             default:
-                return new JsonDao(this.plugin, "json-storage");
+                throw new RuntimeException("Unknown method: " + method);
         }
     }
 }

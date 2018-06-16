@@ -26,9 +26,9 @@
 package me.lucko.luckperms.nukkit.listeners;
 
 import me.lucko.luckperms.common.config.ConfigKeys;
-import me.lucko.luckperms.common.locale.Message;
+import me.lucko.luckperms.common.locale.message.Message;
 import me.lucko.luckperms.common.model.User;
-import me.lucko.luckperms.common.utils.AbstractLoginListener;
+import me.lucko.luckperms.common.plugin.util.AbstractConnectionListener;
 import me.lucko.luckperms.nukkit.LPNukkitPlugin;
 import me.lucko.luckperms.nukkit.model.permissible.LPPermissible;
 import me.lucko.luckperms.nukkit.model.permissible.PermissibleInjector;
@@ -46,7 +46,7 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 
-public class NukkitConnectionListener extends AbstractLoginListener implements Listener {
+public class NukkitConnectionListener extends AbstractConnectionListener implements Listener {
     private final LPNukkitPlugin plugin;
 
     private final Set<UUID> deniedAsyncLogin = Collections.synchronizedSet(new HashSet<>());
@@ -63,10 +63,10 @@ public class NukkitConnectionListener extends AbstractLoginListener implements L
            Listening on LOW priority to allow plugins to modify username / UUID data here. (auth plugins) */
 
         if (this.plugin.getConfiguration().get(ConfigKeys.DEBUG_LOGINS)) {
-            this.plugin.getLog().info("Processing pre-login for " + e.getUuid() + " - " + e.getName());
+            this.plugin.getLogger().info("Processing pre-login for " + e.getUuid() + " - " + e.getName());
         }
 
-        this.plugin.getUniqueConnections().add(e.getUuid());
+        recordConnection(e.getUuid());
 
         /* Actually process the login for the connection.
            We do this here to delay the login until the data is ready.
@@ -81,7 +81,7 @@ public class NukkitConnectionListener extends AbstractLoginListener implements L
             User user = loadUser(e.getUuid(), e.getName());
             this.plugin.getEventFactory().handleUserLoginProcess(e.getUuid(), e.getName(), user);
         } catch (Exception ex) {
-            this.plugin.getLog().severe("Exception occurred whilst loading data for " + e.getUuid() + " - " + e.getName());
+            this.plugin.getLogger().severe("Exception occurred whilst loading data for " + e.getUuid() + " - " + e.getName());
             ex.printStackTrace();
 
             // deny the connection
@@ -101,7 +101,7 @@ public class NukkitConnectionListener extends AbstractLoginListener implements L
 
             // This is a problem, as they were denied at low priority, but are now being allowed.
             if (e.getLoginResult() == PlayerAsyncPreLoginEvent.LoginResult.SUCCESS) {
-                this.plugin.getLog().severe("Player connection was re-allowed for " + e.getUuid());
+                this.plugin.getLogger().severe("Player connection was re-allowed for " + e.getUuid());
                 e.disAllow("");
             }
         }
@@ -115,7 +115,7 @@ public class NukkitConnectionListener extends AbstractLoginListener implements L
         final Player player = e.getPlayer();
 
         if (this.plugin.getConfiguration().get(ConfigKeys.DEBUG_LOGINS)) {
-            this.plugin.getLog().info("Processing login for " + player.getUniqueId() + " - " + player.getName());
+            this.plugin.getLogger().info("Processing login for " + player.getUniqueId() + " - " + player.getName());
         }
 
         final User user = this.plugin.getUserManager().getIfLoaded(player.getUniqueId());
@@ -124,7 +124,7 @@ public class NukkitConnectionListener extends AbstractLoginListener implements L
         if (user == null) {
             this.deniedLogin.add(e.getPlayer().getUniqueId());
 
-            this.plugin.getLog().warn("User " + player.getUniqueId() + " - " + player.getName() + " doesn't have data pre-loaded. - denying login.");
+            this.plugin.getLogger().warn("User " + player.getUniqueId() + " - " + player.getName() + " doesn't have data pre-loaded. - denying login.");
             e.setCancelled();
             e.setKickMessage(Message.LOADING_ERROR.asString(this.plugin.getLocaleManager()));
             return;
@@ -143,7 +143,7 @@ public class NukkitConnectionListener extends AbstractLoginListener implements L
             t.printStackTrace();
         }
 
-        this.plugin.refreshAutoOp(user, player);
+        this.plugin.refreshAutoOp(player);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -152,24 +152,13 @@ public class NukkitConnectionListener extends AbstractLoginListener implements L
            If the connection was cancelled here, we need to do something to clean up the data that was loaded. */
 
         // Check to see if this connection was denied at LOW. Even if it was denied at LOW, their data will still be present.
-        boolean denied = false;
         if (this.deniedLogin.remove(e.getPlayer().getUniqueId())) {
-            denied = true;
-
             // This is a problem, as they were denied at low priority, but are now being allowed.
             if (!e.isCancelled()) {
-                this.plugin.getLog().severe("Player connection was re-allowed for " + e.getPlayer().getUniqueId());
+                this.plugin.getLogger().severe("Player connection was re-allowed for " + e.getPlayer().getUniqueId());
                 e.setCancelled();
             }
         }
-
-        // Login event was cancelled by another plugin since we first loaded their data
-        if (denied || e.isCancelled()) {
-            return;
-        }
-
-        // everything is going well. login was processed ok, this is just to refresh auto-op status.
-        this.plugin.refreshAutoOp(this.plugin.getUserManager().getIfLoaded(e.getPlayer().getUniqueId()), e.getPlayer());
     }
 
     // Wait until the last priority to unload, so plugins can still perform permission checks on this event
@@ -194,7 +183,7 @@ public class NukkitConnectionListener extends AbstractLoginListener implements L
         this.plugin.getUserManager().getHouseKeeper().registerUsage(player.getUniqueId());
 
         // force a clear of transient nodes
-        this.plugin.getScheduler().doAsync(() -> {
+        this.plugin.getBootstrap().getScheduler().executeAsync(() -> {
             User user = this.plugin.getUserManager().getIfLoaded(player.getUniqueId());
             if (user != null) {
                 user.clearTransientNodes();

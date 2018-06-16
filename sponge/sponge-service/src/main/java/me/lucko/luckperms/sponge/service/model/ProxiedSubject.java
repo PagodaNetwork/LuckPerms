@@ -25,7 +25,7 @@
 
 package me.lucko.luckperms.sponge.service.model;
 
-import me.lucko.luckperms.sponge.service.reference.LPSubjectReference;
+import me.lucko.luckperms.api.context.ImmutableContextSet;
 
 import org.spongepowered.api.service.permission.Subject;
 
@@ -38,5 +38,7 @@ public interface ProxiedSubject {
 
     @Nonnull
     LPSubjectReference asSubjectReference();
+
+    ImmutableContextSet getActiveContextSet();
 
 }

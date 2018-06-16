@@ -29,6 +29,7 @@ import com.google.common.collect.Sets;
 
 import me.lucko.luckperms.nukkit.LPNukkitPlugin;
 
+import cn.nukkit.Player;
 import cn.nukkit.permission.Permissible;
 import cn.nukkit.plugin.PluginManager;
 
@@ -161,6 +162,9 @@ public final class LPSubscriptionMap extends HashMap<String, Set<Permissible>> {
             if (content != null) {
                 this.backing.addAll(content);
             }
+
+            // remove all players from the map
+            this.backing.removeIf(p -> p instanceof Player);
         }
 
         private LPSubscriptionValueSet(String permission) {
@@ -169,7 +173,7 @@ public final class LPSubscriptionMap extends HashMap<String, Set<Permissible>> {
 
         private Sets.SetView<Permissible> getContentView() {
             // gather players (LPPermissibles)
-            Set<Permissible> players = LPSubscriptionMap.this.plugin.getServer().getOnlinePlayers().values().stream()
+            Set<Permissible> players = LPSubscriptionMap.this.plugin.getBootstrap().getServer().getOnlinePlayers().values().stream()
                     .filter(player -> player.isPermissionSet(this.permission))
                     .collect(Collectors.toSet());
 
@@ -223,6 +227,11 @@ public final class LPSubscriptionMap extends HashMap<String, Set<Permissible>> {
 
         @Override
         public boolean add(Permissible permissible) {
+            // don't allow players to be put into this map
+            if (permissible instanceof Player) {
+                return true;
+            }
+
             return this.backing.add(permissible);
         }
 

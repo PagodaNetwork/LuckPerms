@@ -28,9 +28,11 @@ package me.lucko.luckperms.common.api.delegates.model;
 import com.google.common.base.Preconditions;
 
 import me.lucko.luckperms.api.DataMutateResult;
+import me.lucko.luckperms.api.StandardNodeEquality;
 import me.lucko.luckperms.api.caching.UserData;
+import me.lucko.luckperms.common.model.NodeMapType;
 import me.lucko.luckperms.common.model.User;
-import me.lucko.luckperms.common.node.NodeFactory;
+import me.lucko.luckperms.common.node.factory.NodeFactory;
 
 import java.util.Objects;
 import java.util.UUID;
@@ -72,6 +74,7 @@ public final class ApiUser extends ApiPermissionHolder implements me.lucko.luckp
         return this.handle.getPrimaryGroup().getValue();
     }
 
+    @Nonnull
     @Override
     public DataMutateResult setPrimaryGroup(@Nonnull String group) {
         Objects.requireNonNull(group, "group");
@@ -79,7 +82,7 @@ public final class ApiUser extends ApiPermissionHolder implements me.lucko.luckp
             return DataMutateResult.ALREADY_HAS;
         }
 
-        if (!this.handle.hasPermission(NodeFactory.buildGroupNode(group.toLowerCase()).build()).asBoolean()) {
+        if (!this.handle.hasPermission(NodeMapType.ENDURING, NodeFactory.buildGroupNode(group.toLowerCase()).build(), StandardNodeEquality.IGNORE_EXPIRY_TIME_AND_VALUE).asBoolean()) {
             return DataMutateResult.FAIL;
         }
 
@@ -96,13 +99,13 @@ public final class ApiUser extends ApiPermissionHolder implements me.lucko.luckp
     @Override
     @Deprecated
     public void refreshPermissions() {
-        this.handle.getRefreshBuffer().requestDirectly();
+
     }
 
     @Override
     @Deprecated
     public void setupDataCache() {
-        this.handle.preCalculateData();
+
     }
 
     @Override

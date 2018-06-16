@@ -30,7 +30,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 
 import me.lucko.luckperms.api.context.ImmutableContextSet;
-import me.lucko.luckperms.sponge.service.reference.LPSubjectReference;
 
 import org.spongepowered.api.service.permission.SubjectCollection;
 
@@ -51,6 +50,19 @@ public interface LPSubjectCollection {
     String getIdentifier();
 
     Predicate<String> getIdentifierValidityPredicate();
+
+    // transient has priority for all collections except default
+    default ResolutionOrder getResolutionOrder() {
+        if (isDefaultsCollection()) {
+            return ResolutionOrder.TRANSIENT_LAST;
+        } else {
+            return ResolutionOrder.TRANSIENT_FIRST;
+        }
+    }
+
+    default boolean isDefaultsCollection() {
+        return false;
+    }
 
     CompletableFuture<LPSubject> loadSubject(String identifier);
 

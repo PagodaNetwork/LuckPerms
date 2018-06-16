@@ -34,12 +34,13 @@ import me.lucko.luckperms.api.context.ImmutableContextSet;
 import me.lucko.luckperms.bukkit.LPBukkitPlugin;
 import me.lucko.luckperms.common.caching.type.MetaAccumulator;
 import me.lucko.luckperms.common.caching.type.MetaCache;
-import me.lucko.luckperms.common.commands.CommandManager;
+import me.lucko.luckperms.common.command.CommandManager;
 import me.lucko.luckperms.common.config.ConfigKeys;
 import me.lucko.luckperms.common.model.Group;
 import me.lucko.luckperms.common.model.PermissionHolder;
 import me.lucko.luckperms.common.model.User;
-import me.lucko.luckperms.common.node.NodeFactory;
+import me.lucko.luckperms.common.node.factory.NodeFactory;
+import me.lucko.luckperms.common.node.model.NodeTypes;
 
 import net.milkbowl.vault.chat.Chat;
 
@@ -84,8 +85,10 @@ public class VaultChatHook extends AbstractVaultChat {
     }
 
     @Override
-    public String getPlayerPrefix(String world, UUID uuid) {
-        Objects.requireNonNull(uuid, "uuid");
+    public String getUserChatPrefix(String world, UUID uuid) {
+        if (uuid == null) {
+            return null;
+        }
         User user = getUser(uuid);
         if (user == null) {
             return null;
@@ -94,14 +97,16 @@ public class VaultChatHook extends AbstractVaultChat {
         MetaCache metaData = user.getCachedData().getMetaData(contexts);
         String ret = metaData.getPrefix();
         if (log()) {
-            logMsg("#getPlayerPrefix: %s - %s - %s", user.getFriendlyName(), contexts.getContexts().toMultimap(), ret);
+            logMsg("#getUserChatPrefix: %s - %s - %s", user.getFriendlyName(), contexts.getContexts().toMultimap(), ret);
         }
         return Strings.nullToEmpty(ret);
     }
 
     @Override
-    public String getPlayerSuffix(String world, UUID uuid) {
-        Objects.requireNonNull(uuid, "uuid");
+    public String getUserChatSuffix(String world, UUID uuid) {
+        if (uuid == null) {
+            return null;
+        }
         User user = getUser(uuid);
         if (user == null) {
             return null;
@@ -110,14 +115,16 @@ public class VaultChatHook extends AbstractVaultChat {
         MetaCache metaData = user.getCachedData().getMetaData(contexts);
         String ret = metaData.getSuffix();
         if (log()) {
-            logMsg("#getPlayerSuffix: %s - %s - %s", user.getFriendlyName(), contexts.getContexts().toMultimap(), ret);
+            logMsg("#getUserChatSuffix: %s - %s - %s", user.getFriendlyName(), contexts.getContexts().toMultimap(), ret);
         }
         return Strings.nullToEmpty(ret);
     }
 
     @Override
-    public void setPlayerPrefix(String world, UUID uuid, String prefix) {
-        Objects.requireNonNull(uuid, "uuid");
+    public void setUserChatPrefix(String world, UUID uuid, String prefix) {
+        if (uuid == null) {
+            return;
+        }
         User user = getUser(uuid);
         if (user == null) {
             return;
@@ -126,8 +133,10 @@ public class VaultChatHook extends AbstractVaultChat {
     }
 
     @Override
-    public void setPlayerSuffix(String world, UUID uuid, String suffix) {
-        Objects.requireNonNull(uuid, "uuid");
+    public void setUserChatSuffix(String world, UUID uuid, String suffix) {
+        if (uuid == null) {
+            return;
+        }
         User user = getUser(uuid);
         if (user == null) {
             return;
@@ -136,8 +145,10 @@ public class VaultChatHook extends AbstractVaultChat {
     }
 
     @Override
-    public String getPlayerInfo(String world, UUID uuid, String key) {
-        Objects.requireNonNull(uuid, "uuid");
+    public String getUserMeta(String world, UUID uuid, String key) {
+        if (uuid == null) {
+            return null;
+        }
         Objects.requireNonNull(key, "key");
         User user = getUser(uuid);
         if (user == null) {
@@ -147,14 +158,16 @@ public class VaultChatHook extends AbstractVaultChat {
         MetaCache metaData = user.getCachedData().getMetaData(contexts);
         String ret = metaData.getMeta().get(key);
         if (log()) {
-            logMsg("#getPlayerInfo: %s - %s - %s - %s", user.getFriendlyName(), contexts.getContexts().toMultimap(), key, ret);
+            logMsg("#getUserMeta: %s - %s - %s - %s", user.getFriendlyName(), contexts.getContexts().toMultimap(), key, ret);
         }
         return ret;
     }
 
     @Override
-    public void setPlayerInfo(String world, UUID uuid, String key, Object value) {
-        Objects.requireNonNull(uuid, "uuid");
+    public void setUserMeta(String world, UUID uuid, String key, Object value) {
+        if (uuid == null) {
+            return;
+        }
         Objects.requireNonNull(key, "key");
         User user = getUser(uuid);
         if (user == null) {
@@ -164,7 +177,7 @@ public class VaultChatHook extends AbstractVaultChat {
     }
 
     @Override
-    public String getGroupsPrefix(String world, String name) {
+    public String getGroupChatPrefix(String world, String name) {
         Objects.requireNonNull(name, "name");
         Group group = getGroup(name);
         if (group == null) {
@@ -180,7 +193,7 @@ public class VaultChatHook extends AbstractVaultChat {
     }
 
     @Override
-    public String getGroupsSuffix(String world, String name) {
+    public String getGroupChatSuffix(String world, String name) {
         Objects.requireNonNull(name, "name");
         Group group = getGroup(name);
         if (group == null) {
@@ -196,7 +209,7 @@ public class VaultChatHook extends AbstractVaultChat {
     }
 
     @Override
-    public void setGroupsPrefix(String world, String name, String prefix) {
+    public void setGroupChatPrefix(String world, String name, String prefix) {
         Objects.requireNonNull(name, "name");
         Group group = getGroup(name);
         if (group == null) {
@@ -206,7 +219,7 @@ public class VaultChatHook extends AbstractVaultChat {
     }
 
     @Override
-    public void setGroupsSuffix(String world, String name, String suffix) {
+    public void setGroupChatSuffix(String world, String name, String suffix) {
         Objects.requireNonNull(name, "name");
         Group group = getGroup(name);
         if (group == null) {
@@ -216,7 +229,7 @@ public class VaultChatHook extends AbstractVaultChat {
     }
 
     @Override
-    public String getGroupInfo(String world, String name, String key) {
+    public String getGroupMeta(String world, String name, String key) {
         Objects.requireNonNull(name, "name");
         Objects.requireNonNull(key, "key");
         Group group = getGroup(name);
@@ -227,13 +240,13 @@ public class VaultChatHook extends AbstractVaultChat {
         MetaCache metaData = group.getCachedData().getMetaData(contexts);
         String ret = metaData.getMeta().get(key);
         if (log()) {
-            logMsg("#getGroupInfo: %s - %s - %s - %s", group.getName(), contexts.getContexts().toMultimap(), key, ret);
+            logMsg("#getGroupMeta: %s - %s - %s - %s", group.getName(), contexts.getContexts().toMultimap(), key, ret);
         }
         return ret;
     }
 
     @Override
-    public void setGroupInfo(String world, String name, String key, Object value) {
+    public void setGroupMeta(String world, String name, String key, Object value) {
         Objects.requireNonNull(name, "name");
         Objects.requireNonNull(key, "key");
         Group group = getGroup(name);
@@ -258,7 +271,7 @@ public class VaultChatHook extends AbstractVaultChat {
         return this.plugin.getConfiguration().get(ConfigKeys.VAULT_DEBUG);
     }
     private void logMsg(String format, Object... args) {
-        this.plugin.getLog().info("[VAULT-CHAT] " + String.format(format, args)
+        this.plugin.getLogger().info("[VAULT-CHAT] " + String.format(format, args)
                 .replace(CommandManager.SECTION_CHAR, '$')
                 .replace(CommandManager.AMPERSAND_CHAR, '$')
         );
@@ -306,7 +319,7 @@ public class VaultChatHook extends AbstractVaultChat {
             }
 
             Node.Builder metaNode;
-            if (key.equalsIgnoreCase(NodeFactory.PREFIX_KEY) || key.equalsIgnoreCase(NodeFactory.SUFFIX_KEY)) {
+            if (key.equalsIgnoreCase(NodeTypes.PREFIX_KEY) || key.equalsIgnoreCase(NodeTypes.SUFFIX_KEY)) {
                 metaNode = NodeFactory.buildChatMetaNode(ChatMetaType.valueOf(key.toUpperCase()), 100, value.toString());
             } else {
                 metaNode = NodeFactory.buildMetaNode(key, value.toString());
@@ -326,6 +339,6 @@ public class VaultChatHook extends AbstractVaultChat {
             context.add(Contexts.WORLD_KEY, world.toLowerCase());
         }
         context.add(Contexts.SERVER_KEY, this.permissionHook.getVaultServer());
-        return new Contexts(context.build(), this.permissionHook.isIncludeGlobal(), true, true, true, true, false);
+        return Contexts.of(context.build(), this.permissionHook.isIncludeGlobal(), true, true, true, true, false);
     }
 }

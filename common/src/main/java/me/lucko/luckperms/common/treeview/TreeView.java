@@ -29,10 +29,10 @@ import com.google.common.base.Splitter;
 import com.google.gson.JsonObject;
 
 import me.lucko.luckperms.common.caching.type.PermissionCache;
-import me.lucko.luckperms.common.commands.sender.Sender;
 import me.lucko.luckperms.common.model.User;
+import me.lucko.luckperms.common.sender.Sender;
 import me.lucko.luckperms.common.utils.gson.JObject;
-import me.lucko.luckperms.common.utils.web.StandardPastebin;
+import me.lucko.luckperms.common.web.StandardPastebin;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -52,7 +52,7 @@ public class TreeView {
     // the actual tree object
     private final ImmutableTreeNode view;
 
-    public TreeView(PermissionVault source, String rootPosition) {
+    public TreeView(PermissionRegistry source, String rootPosition) {
         if (rootPosition.equals("") || rootPosition.equals("*")) {
             rootPosition = ".";
         } else if (!rootPosition.equals(".") && rootPosition.endsWith(".")) {
@@ -79,7 +79,7 @@ public class TreeView {
      * @param source the node source
      * @return the root, if it exists
      */
-    private static Optional<TreeNode> findRoot(String rootPosition, PermissionVault source) {
+    private static Optional<TreeNode> findRoot(String rootPosition, PermissionRegistry source) {
         // get the root of the permission vault
         TreeNode root = source.getRootNode();
 
@@ -167,7 +167,7 @@ public class TreeView {
                 )
                 .toJson();
 
-        return StandardPastebin.BYTEBIN.postJson(payload).id();
+        return StandardPastebin.BYTEBIN.postJson(payload, true).id();
     }
 
 }

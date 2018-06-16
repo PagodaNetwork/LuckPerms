@@ -33,20 +33,21 @@ import de.bananaco.bpermissions.api.WorldManager;
 
 import me.lucko.luckperms.api.ChatMetaType;
 import me.lucko.luckperms.api.event.cause.CreationCause;
-import me.lucko.luckperms.common.commands.CommandResult;
-import me.lucko.luckperms.common.commands.abstraction.SubCommand;
-import me.lucko.luckperms.common.commands.impl.migration.MigrationUtils;
-import me.lucko.luckperms.common.commands.sender.Sender;
-import me.lucko.luckperms.common.locale.CommandSpec;
+import me.lucko.luckperms.common.command.CommandResult;
+import me.lucko.luckperms.common.command.abstraction.SubCommand;
+import me.lucko.luckperms.common.commands.migration.MigrationUtils;
 import me.lucko.luckperms.common.locale.LocaleManager;
-import me.lucko.luckperms.common.logging.ProgressLogger;
+import me.lucko.luckperms.common.locale.command.CommandSpec;
 import me.lucko.luckperms.common.model.Group;
 import me.lucko.luckperms.common.model.PermissionHolder;
 import me.lucko.luckperms.common.model.User;
-import me.lucko.luckperms.common.node.NodeFactory;
+import me.lucko.luckperms.common.node.factory.NodeFactory;
+import me.lucko.luckperms.common.node.model.NodeTypes;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
+import me.lucko.luckperms.common.sender.Sender;
+import me.lucko.luckperms.common.utils.Iterators;
 import me.lucko.luckperms.common.utils.Predicates;
-import me.lucko.luckperms.common.utils.SafeIteration;
+import me.lucko.luckperms.common.utils.ProgressLogger;
 
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -58,7 +59,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static me.lucko.luckperms.common.commands.CommandPermission.MIGRATION;
+import static me.lucko.luckperms.common.command.access.CommandPermission.MIGRATION;
 
 public class MigrationBPermissions extends SubCommand<Object> {
     private static final Field UCONFIG_FIELD;
@@ -72,7 +73,7 @@ public class MigrationBPermissions extends SubCommand<Object> {
     }
 
     public MigrationBPermissions(LocaleManager locale) {
-        super(CommandSpec.MIGRATION_COMMAND.spec(locale), "bpermissions", MIGRATION, Predicates.alwaysFalse());
+        super(CommandSpec.MIGRATION_COMMAND.localize(locale), "bpermissions", MIGRATION, Predicates.alwaysFalse());
     }
 
     @Override
@@ -85,7 +86,7 @@ public class MigrationBPermissions extends SubCommand<Object> {
 
         WorldManager worldManager = WorldManager.getInstance();
         if (worldManager == null) {
-            log.logErr("Plugin not loaded.");
+            log.logError("Plugin not loaded.");
             return CommandResult.STATE_ERROR;
         }
 
@@ -111,7 +112,7 @@ public class MigrationBPermissions extends SubCommand<Object> {
 
             Set<String> users = configSection.getKeys(false);
             if (users == null) {
-                log.logErr("Couldn't get a list of users.");
+                log.logError("Couldn't get a list of users.");
                 return CommandResult.FAILURE;
             }
             AtomicInteger userLoadCount = new AtomicInteger(0);
@@ -124,14 +125,14 @@ public class MigrationBPermissions extends SubCommand<Object> {
 
         // Migrate one world at a time.
         log.log("Starting world migration.");
-        SafeIteration.iterate(worldManager.getAllWorlds(), world -> {
+        Iterators.iterate(worldManager.getAllWorlds(), world -> {
             log.log("Migrating world: " + world.getName());
 
             // Migrate all groups
             log.log("Starting group migration in world " + world.getName() + ".");
             AtomicInteger groupCount = new AtomicInteger(0);
 
-            SafeIteration.iterate(world.getAll(CalculableType.GROUP), group -> {
+            Iterators.iterate(world.getAll(CalculableType.GROUP), group -> {
                 String groupName = MigrationUtils.standardizeName(group.getName());
                 if (group.getName().equalsIgnoreCase(world.getDefaultGroup())) {
                     groupName = NodeFactory.DEFAULT_GROUP_NAME;
@@ -153,9 +154,9 @@ public class MigrationBPermissions extends SubCommand<Object> {
             // Migrate all users
             log.log("Starting user migration in world " + world.getName() + ".");
             AtomicInteger userCount = new AtomicInteger(0);
-            SafeIteration.iterate(world.getAll(CalculableType.USER), user -> {
+            Iterators.iterate(world.getAll(CalculableType.USER), user -> {
                 // There is no mention of UUIDs in the API. I assume that name = uuid. idk?
-                UUID uuid = BukkitMigrationUtils.lookupUuid(log, user.getName());
+                UUID uuid = BukkitUuids.lookupUuid(log, user.getName());
                 if (uuid == null) {
                     return;
                 }
@@ -212,7 +213,7 @@ public class MigrationBPermissions extends SubCommand<Object> {
                 continue;
             }
 
-            if (meta.getKey().equalsIgnoreCase(NodeFactory.PREFIX_KEY) || meta.getKey().equalsIgnoreCase(NodeFactory.SUFFIX_KEY)) {
+            if (meta.getKey().equalsIgnoreCase(NodeTypes.PREFIX_KEY) || meta.getKey().equalsIgnoreCase(NodeTypes.SUFFIX_KEY)) {
                 ChatMetaType type = ChatMetaType.valueOf(meta.getKey().toUpperCase());
                 holder.setPermission(NodeFactory.buildChatMetaNode(type, c.getPriority(), meta.getValue()).setWorld(world.getName()).build());
                 continue;

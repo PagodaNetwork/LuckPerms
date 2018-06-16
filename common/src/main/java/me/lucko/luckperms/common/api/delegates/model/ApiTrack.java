@@ -28,8 +28,13 @@ package me.lucko.luckperms.common.api.delegates.model;
 import com.google.common.base.Preconditions;
 
 import me.lucko.luckperms.api.DataMutateResult;
+import me.lucko.luckperms.api.DemotionResult;
 import me.lucko.luckperms.api.Group;
+import me.lucko.luckperms.api.PromotionResult;
+import me.lucko.luckperms.api.User;
+import me.lucko.luckperms.api.context.ContextSet;
 import me.lucko.luckperms.common.model.Track;
+import me.lucko.luckperms.common.utils.Predicates;
 
 import java.util.List;
 import java.util.Objects;
@@ -90,24 +95,40 @@ public final class ApiTrack implements me.lucko.luckperms.api.Track {
         }
     }
 
+    @Nonnull
+    @Override
+    public PromotionResult promote(@Nonnull User user, @Nonnull ContextSet contextSet) {
+        return this.handle.promote(ApiUser.cast(user), contextSet, Predicates.alwaysTrue(), null);
+    }
+
+    @Nonnull
+    @Override
+    public DemotionResult demote(@Nonnull User user, @Nonnull ContextSet contextSet) {
+        return this.handle.demote(ApiUser.cast(user), contextSet, Predicates.alwaysTrue(), null);
+    }
+
+    @Nonnull
     @Override
     public DataMutateResult appendGroup(@Nonnull Group group) {
         Objects.requireNonNull(group, "group");
         return this.handle.appendGroup(ApiGroup.cast(group));
     }
 
+    @Nonnull
     @Override
     public DataMutateResult insertGroup(@Nonnull Group group, int position) throws IndexOutOfBoundsException {
         Objects.requireNonNull(group, "group");
         return this.handle.insertGroup(ApiGroup.cast(group), position);
     }
 
+    @Nonnull
     @Override
     public DataMutateResult removeGroup(@Nonnull Group group) {
         Objects.requireNonNull(group, "group");
         return this.handle.removeGroup(ApiGroup.cast(group));
     }
 
+    @Nonnull
     @Override
     public DataMutateResult removeGroup(@Nonnull String group) {
         Objects.requireNonNull(group, "group");

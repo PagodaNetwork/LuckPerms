@@ -28,20 +28,23 @@ package me.lucko.luckperms.bukkit.migration;
 import me.lucko.luckperms.api.ChatMetaType;
 import me.lucko.luckperms.api.Node;
 import me.lucko.luckperms.api.event.cause.CreationCause;
-import me.lucko.luckperms.common.commands.CommandPermission;
-import me.lucko.luckperms.common.commands.CommandResult;
-import me.lucko.luckperms.common.commands.abstraction.SubCommand;
-import me.lucko.luckperms.common.commands.impl.migration.MigrationUtils;
-import me.lucko.luckperms.common.commands.sender.Sender;
-import me.lucko.luckperms.common.locale.CommandSpec;
+import me.lucko.luckperms.common.command.CommandResult;
+import me.lucko.luckperms.common.command.abstraction.SubCommand;
+import me.lucko.luckperms.common.command.access.CommandPermission;
+import me.lucko.luckperms.common.commands.migration.MigrationUtils;
 import me.lucko.luckperms.common.locale.LocaleManager;
-import me.lucko.luckperms.common.logging.ProgressLogger;
+import me.lucko.luckperms.common.locale.command.CommandSpec;
 import me.lucko.luckperms.common.model.Group;
 import me.lucko.luckperms.common.model.User;
-import me.lucko.luckperms.common.node.NodeFactory;
+import me.lucko.luckperms.common.model.UserIdentifier;
+import me.lucko.luckperms.common.node.factory.NodeFactory;
+import me.lucko.luckperms.common.node.model.NodeTypes;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
+import me.lucko.luckperms.common.sender.Sender;
+import me.lucko.luckperms.common.utils.Iterators;
 import me.lucko.luckperms.common.utils.Predicates;
-import me.lucko.luckperms.common.utils.SafeIteration;
+import me.lucko.luckperms.common.utils.ProgressLogger;
+import me.lucko.luckperms.common.utils.Uuids;
 
 import org.anjocaido.groupmanager.GlobalGroups;
 import org.anjocaido.groupmanager.GroupManager;
@@ -62,7 +65,7 @@ import java.util.stream.Collectors;
 
 public class MigrationGroupManager extends SubCommand<Object> {
     public MigrationGroupManager(LocaleManager locale) {
-        super(CommandSpec.MIGRATION_GROUPMANAGER.spec(locale), "groupmanager", CommandPermission.MIGRATION, Predicates.is(0));
+        super(CommandSpec.MIGRATION_GROUPMANAGER.localize(locale), "groupmanager", CommandPermission.MIGRATION, Predicates.is(0));
     }
 
     @Override
@@ -74,14 +77,14 @@ public class MigrationGroupManager extends SubCommand<Object> {
         log.log("Starting.");
 
         if (!args.get(0).equalsIgnoreCase("true") && !args.get(0).equalsIgnoreCase("false")) {
-            log.logErr("Was expecting true/false, but got " + args.get(0) + " instead.");
+            log.logError("Was expecting true/false, but got " + args.get(0) + " instead.");
             return CommandResult.STATE_ERROR;
         }
         final boolean migrateAsGlobal = Boolean.parseBoolean(args.get(0));
         final Function<String, String> worldMappingFunc = s -> migrateAsGlobal ? null : s;
         
         if (!Bukkit.getPluginManager().isPluginEnabled("GroupManager")) {
-            log.logErr("Plugin not loaded.");
+            log.logError("Plugin not loaded.");
             return CommandResult.STATE_ERROR;
         }
 
@@ -93,7 +96,7 @@ public class MigrationGroupManager extends SubCommand<Object> {
         GlobalGroups gg = GroupManager.getGlobalGroups();
 
         AtomicInteger globalGroupCount = new AtomicInteger(0);
-        SafeIteration.iterate(gg.getGroupList(), g -> {
+        Iterators.iterate(gg.getGroupList(), g -> {
             String groupName = MigrationUtils.standardizeName(g.getName());
             Group group = plugin.getStorage().createAndLoadGroup(groupName, CreationCause.INTERNAL).join();
 
@@ -112,7 +115,7 @@ public class MigrationGroupManager extends SubCommand<Object> {
         log.log("Migrated " + globalGroupCount.get() + " global groups");
 
         // Collect data
-        Map<UUID, Set<Node>> users = new HashMap<>();
+        Map<UserIdentifier, Set<Node>> users = new HashMap<>();
         Map<UUID, String> primaryGroups = new HashMap<>();
         Map<String, Set<Node>> groups = new HashMap<>();
 
@@ -120,13 +123,13 @@ public class MigrationGroupManager extends SubCommand<Object> {
 
         // Collect data for all users and groups.
         log.log("Collecting user and group data.");
-        SafeIteration.iterate(worlds, String::toLowerCase, world -> {
+        Iterators.iterate(worlds, String::toLowerCase, world -> {
             log.log("Querying world " + world);
 
             WorldDataHolder wdh = wh.getWorldData(world);
 
             AtomicInteger groupWorldCount = new AtomicInteger(0);
-            SafeIteration.iterate(wdh.getGroupList(), group -> {
+            Iterators.iterate(wdh.getGroupList(), group -> {
                 String groupName = MigrationUtils.standardizeName(group.getName());
 
                 groups.putIfAbsent(groupName, new HashSet<>());
@@ -147,7 +150,7 @@ public class MigrationGroupManager extends SubCommand<Object> {
                     if (key.isEmpty() || value.isEmpty()) continue;
                     if (key.equals("build")) continue;
 
-                    if (key.equals(NodeFactory.PREFIX_KEY) || key.equals(NodeFactory.SUFFIX_KEY)) {
+                    if (key.equals(NodeTypes.PREFIX_KEY) || key.equals(NodeTypes.SUFFIX_KEY)) {
                         ChatMetaType type = ChatMetaType.valueOf(key.toUpperCase());
                         groups.get(groupName).add(NodeFactory.buildChatMetaNode(type, 50, value).setWorld(worldMappingFunc.apply(world)).build());
                     } else {
@@ -160,22 +163,29 @@ public class MigrationGroupManager extends SubCommand<Object> {
             log.log("Migrated " + groupWorldCount.get() + " groups in world " + world);
 
             AtomicInteger userWorldCount = new AtomicInteger(0);
-            SafeIteration.iterate(wdh.getUserList(), user -> {
-                UUID uuid = BukkitMigrationUtils.lookupUuid(log, user.getUUID());
+            Iterators.iterate(wdh.getUserList(), user -> {
+                UUID uuid = BukkitUuids.lookupUuid(log, user.getUUID());
                 if (uuid == null) {
                     return;
                 }
 
-                users.putIfAbsent(uuid, new HashSet<>());
+                String lastName = user.getLastName();
+                if (Uuids.parse(lastName).isPresent()) {
+                    lastName = null;
+                }
+
+                UserIdentifier id = UserIdentifier.of(uuid, lastName);
+
+                users.putIfAbsent(id, new HashSet<>());
 
                 for (String node : user.getPermissionList()) {
                     if (node.isEmpty()) continue;
-                    users.get(uuid).add(MigrationUtils.parseNode(node, true).setWorld(worldMappingFunc.apply(world)).build());
+                    users.get(id).add(MigrationUtils.parseNode(node, true).setWorld(worldMappingFunc.apply(world)).build());
                 }
 
                 // Collect sub groups
                 String finalWorld = worldMappingFunc.apply(world);
-                users.get(uuid).addAll(user.subGroupListStringCopy().stream()
+                users.get(id).addAll(user.subGroupListStringCopy().stream()
                         .filter(n -> !n.isEmpty())
                         .map(n -> NodeFactory.groupNode(MigrationUtils.standardizeName(n)))
                         .map(n -> NodeFactory.make(n, true, null, finalWorld))
@@ -192,11 +202,11 @@ public class MigrationGroupManager extends SubCommand<Object> {
                     if (key.isEmpty() || value.isEmpty()) continue;
                     if (key.equals("build")) continue;
 
-                    if (key.equals(NodeFactory.PREFIX_KEY) || key.equals(NodeFactory.SUFFIX_KEY)) {
+                    if (key.equals(NodeTypes.PREFIX_KEY) || key.equals(NodeTypes.SUFFIX_KEY)) {
                         ChatMetaType type = ChatMetaType.valueOf(key.toUpperCase());
-                        users.get(uuid).add(NodeFactory.buildChatMetaNode(type, 100, value).setWorld(worldMappingFunc.apply(world)).build());
+                        users.get(id).add(NodeFactory.buildChatMetaNode(type, 100, value).setWorld(worldMappingFunc.apply(world)).build());
                     } else {
-                        users.get(uuid).add(NodeFactory.buildMetaNode(key, value).setWorld(worldMappingFunc.apply(world)).build());
+                        users.get(id).add(NodeFactory.buildMetaNode(key, value).setWorld(worldMappingFunc.apply(world)).build());
                     }
                 }
 
@@ -210,7 +220,7 @@ public class MigrationGroupManager extends SubCommand<Object> {
 
         log.log("Starting group migration.");
         AtomicInteger groupCount = new AtomicInteger(0);
-        SafeIteration.iterate(groups.entrySet(), e -> {
+        Iterators.iterate(groups.entrySet(), e -> {
             Group group = plugin.getStorage().createAndLoadGroup(e.getKey(), CreationCause.INTERNAL).join();
 
             for (Node node : e.getValue()) {
@@ -224,14 +234,14 @@ public class MigrationGroupManager extends SubCommand<Object> {
 
         log.log("Starting user migration.");
         AtomicInteger userCount = new AtomicInteger(0);
-        SafeIteration.iterate(users.entrySet(), e -> {
-            User user = plugin.getStorage().loadUser(e.getKey(), null).join();
+        Iterators.iterate(users.entrySet(), e -> {
+            User user = plugin.getStorage().loadUser(e.getKey().getUuid(), e.getKey().getUsername().orElse(null)).join();
 
             for (Node node : e.getValue()) {
                 user.setPermission(node);
             }
 
-            String primaryGroup = primaryGroups.get(e.getKey());
+            String primaryGroup = primaryGroups.get(e.getKey().getUuid());
             if (primaryGroup != null && !primaryGroup.isEmpty()) {
                 user.setPermission(NodeFactory.buildGroupNode(primaryGroup).build());
                 user.getPrimaryGroup().setStoredValue(primaryGroup);

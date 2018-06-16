@@ -26,9 +26,9 @@
 package me.lucko.luckperms.sponge;
 
 import me.lucko.luckperms.api.Tristate;
-import me.lucko.luckperms.common.commands.CommandManager;
-import me.lucko.luckperms.common.commands.sender.SenderFactory;
+import me.lucko.luckperms.common.command.CommandManager;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
+import me.lucko.luckperms.common.sender.SenderFactory;
 import me.lucko.luckperms.sponge.service.CompatibilityUtil;
 
 import net.kyori.text.Component;
@@ -74,7 +74,14 @@ public class SpongeSenderFactory extends SenderFactory<CommandSource> {
 
     @Override
     protected Tristate getPermissionValue(CommandSource source, String node) {
-        return CompatibilityUtil.convertTristate(source.getPermissionValue(source.getActiveContexts(), node));
+        Tristate ret = CompatibilityUtil.convertTristate(source.getPermissionValue(source.getActiveContexts(), node));
+
+        // check the permdefault
+        if (ret == Tristate.UNDEFINED && source.hasPermission(node)) {
+            ret = Tristate.TRUE;
+        }
+
+        return ret;
     }
 
     @Override

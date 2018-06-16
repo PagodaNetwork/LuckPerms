@@ -27,6 +27,7 @@ package me.lucko.luckperms.api.context;
 
 import com.google.common.collect.Multimap;
 
+import java.util.Iterator;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -47,9 +48,8 @@ import javax.annotation.Nonnull;
  * <p>Contexts can be combined with each other to form so called
  * "context sets" - simply a collection of context pairs.</p>
  *
- * <p>Context keys are case-insensitive, and will be converted to
- * {@link String#toLowerCase() lowercase} by all implementations.
- * Values however are case-sensitive.</p>
+ * <p>Context keys and values are case-insensitive, and will be converted to
+ * {@link String#toLowerCase() lowercase} by all implementations.</p>
  *
  * <p>Context keys and values may not be null or empty. A key/value will be
  * deemed empty if it's length is zero, or if it consists of only space
@@ -61,7 +61,7 @@ import javax.annotation.Nonnull;
  *
  * @since 2.13
  */
-public interface ContextSet {
+public interface ContextSet extends Iterable<Map.Entry<String, String>> {
 
     /**
      * Creates an {@link ImmutableContextSet} from a context pair.
@@ -232,6 +232,20 @@ public interface ContextSet {
     Multimap<String, String> toMultimap();
 
     /**
+     * Returns an {@link Iterator} over each of the context pairs in this set.
+     *
+     * <p>The returned iterator represents the state of the set at the time of creation. It is not
+     * updated as the set changes.</p>
+     *
+     * <p>The iterator does not support {@link Iterator#remove()} calls.</p>
+     *
+     * @return an iterator
+     */
+    @Nonnull
+    @Override
+    Iterator<Map.Entry<String, String>> iterator();
+
+    /**
      * Returns if the {@link ContextSet} contains at least one value for the
      * given key.
      *
@@ -272,32 +286,15 @@ public interface ContextSet {
     /**
      * Returns if the {@link ContextSet} contains a given context pairing.
      *
-     * <p>This lookup is case-sensitive on the value.</p>
-     *
      * @param key   the key to look for
-     * @param value the value to look for (case sensitive)
+     * @param value the value to look for
      * @return true if the set contains the context pair
      * @throws NullPointerException if the key or value is null
      */
     boolean has(@Nonnull String key, @Nonnull String value);
 
     /**
-     * Returns if the {@link ContextSet} contains a given context pairing,
-     * ignoring the case of values.
-     *
-     * <p>This lookup is case-insensitive on the value.</p>
-     *
-     * @param key   the key to look for
-     * @param value the value to look for
-     * @return true if the set contains the context pair
-     * @throws NullPointerException if the key or value is null
-     */
-    boolean hasIgnoreCase(@Nonnull String key, @Nonnull String value);
-
-    /**
      * Returns if the {@link ContextSet} contains a given context pairing.
-     *
-     * <p>This lookup is case-sensitive on the value.</p>
      *
      * @param entry the entry to look for
      * @return true if the set contains the context pair
@@ -309,53 +306,18 @@ public interface ContextSet {
     }
 
     /**
-     * Returns if the {@link ContextSet} contains a given context pairing,
-     * ignoring the case of values.
-     *
-     * <p>This lookup is case-insensitive on the value.</p>
-     *
-     * @param entry the entry to look for
-     * @return true if the set contains the context pair
-     * @throws NullPointerException if the key or value is null
-     */
-    default boolean hasIgnoreCase(@Nonnull Map.Entry<String, String> entry) {
-        Objects.requireNonNull(entry, "entry");
-        return hasIgnoreCase(entry.getKey(), entry.getValue());
-    }
-
-    /**
      * Returns if this {@link ContextSet} is fully "satisfied" by another set.
      *
      * <p>For a context set to "satisfy" another, it must itself contain all of
      * the context pairings in the other set.</p>
      *
      * <p>Mathematically, this method returns true if this set is a <b>subset</b> of the other.</p>
-     *
-     * <p>This check is case-sensitive. For a case-insensitive check,
-     * use {@link #isSatisfiedBy(ContextSet, boolean)}.</p>
      *
      * @param other the other set to check
      * @return true if all entries in this set are also in the other set
      * @since 3.1
      */
     default boolean isSatisfiedBy(@Nonnull ContextSet other) {
-        return isSatisfiedBy(other, true);
-    }
-
-    /**
-     * Returns if this {@link ContextSet} is fully "satisfied" by another set.
-     *
-     * <p>For a context set to "satisfy" another, it must itself contain all of
-     * the context pairings in the other set.</p>
-     *
-     * <p>Mathematically, this method returns true if this set is a <b>subset</b> of the other.</p>
-     *
-     * @param other the other set to check
-     * @param caseSensitive if the check should be case sensitive
-     * @return true if all entries in this set are also in the other set
-     * @since 3.4
-     */
-    default boolean isSatisfiedBy(@Nonnull ContextSet other, boolean caseSensitive) {
         if (this == other) {
             return true;
         }
@@ -373,14 +335,8 @@ public interface ContextSet {
         } else {
             // neither are empty, we need to compare the individual entries
             for (Map.Entry<String, String> context : toSet()) {
-                if (caseSensitive) {
-                    if (!other.has(context)) {
-                        return false;
-                    }
-                } else {
-                    if (!other.hasIgnoreCase(context)) {
-                        return false;
-                    }
+                if (!other.has(context)) {
+                    return false;
                 }
             }
             return true;

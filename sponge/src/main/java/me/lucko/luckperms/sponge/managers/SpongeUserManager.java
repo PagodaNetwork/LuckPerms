@@ -35,19 +35,20 @@ import com.google.common.collect.Maps;
 import me.lucko.luckperms.api.HeldPermission;
 import me.lucko.luckperms.api.Tristate;
 import me.lucko.luckperms.api.context.ImmutableContextSet;
+import me.lucko.luckperms.common.bulkupdate.comparisons.Constraint;
+import me.lucko.luckperms.common.bulkupdate.comparisons.StandardComparison;
 import me.lucko.luckperms.common.managers.user.AbstractUserManager;
 import me.lucko.luckperms.common.managers.user.UserHousekeeper;
-import me.lucko.luckperms.common.references.UserIdentifier;
+import me.lucko.luckperms.common.model.UserIdentifier;
 import me.lucko.luckperms.common.utils.ImmutableCollectors;
 import me.lucko.luckperms.common.utils.Uuids;
 import me.lucko.luckperms.sponge.LPSpongePlugin;
 import me.lucko.luckperms.sponge.model.SpongeUser;
 import me.lucko.luckperms.sponge.service.LuckPermsService;
-import me.lucko.luckperms.sponge.service.ProxyFactory;
 import me.lucko.luckperms.sponge.service.model.LPSubject;
 import me.lucko.luckperms.sponge.service.model.LPSubjectCollection;
-import me.lucko.luckperms.sponge.service.reference.LPSubjectReference;
-import me.lucko.luckperms.sponge.service.reference.SubjectReferenceFactory;
+import me.lucko.luckperms.sponge.service.model.LPSubjectReference;
+import me.lucko.luckperms.sponge.service.proxy.ProxyFactory;
 
 import org.spongepowered.api.service.permission.PermissionService;
 import org.spongepowered.api.service.permission.SubjectCollection;
@@ -80,8 +81,6 @@ public class SpongeUserManager extends AbstractUserManager<SpongeUser> implement
                     user.getIoLock().lock();
                     user.getIoLock().unlock();
 
-                    // ok, data is here, let's do the pre-calculation stuff.
-                    user.preCalculateData();
                     return user.sponge();
                 }
 
@@ -89,11 +88,10 @@ public class SpongeUserManager extends AbstractUserManager<SpongeUser> implement
                 getPlugin().getStorage().loadUser(u, null).join();
                 user = getIfLoaded(u);
                 if (user == null) {
-                    getPlugin().getLog().severe("Error whilst loading user '" + u + "'.");
+                    getPlugin().getLogger().severe("Error whilst loading user '" + u + "'.");
                     throw new RuntimeException();
                 }
 
-                user.preCalculateData();
                 return user.sponge();
             });
 
@@ -149,7 +147,7 @@ public class SpongeUserManager extends AbstractUserManager<SpongeUser> implement
             return CompletableFuture.completedFuture(present);
         }
 
-        return CompletableFuture.supplyAsync(() -> this.subjectLoadingCache.get(uuid), this.plugin.getScheduler().async());
+        return CompletableFuture.supplyAsync(() -> this.subjectLoadingCache.get(uuid), this.plugin.getBootstrap().getScheduler().async());
     }
 
     @Override
@@ -188,7 +186,7 @@ public class SpongeUserManager extends AbstractUserManager<SpongeUser> implement
             }
 
             return ret.build();
-        }, this.plugin.getScheduler().async());
+        }, this.plugin.getBootstrap().getScheduler().async());
     }
 
     @Override
@@ -205,7 +203,7 @@ public class SpongeUserManager extends AbstractUserManager<SpongeUser> implement
             this.plugin.getStorage().getUniqueUsers().join().forEach(uuid -> ids.add(uuid.toString()));
 
             return ids.build();
-        }, this.plugin.getScheduler().async());
+        }, this.plugin.getBootstrap().getScheduler().async());
     }
 
     @Override
@@ -213,15 +211,15 @@ public class SpongeUserManager extends AbstractUserManager<SpongeUser> implement
         return CompletableFuture.supplyAsync(() -> {
             ImmutableMap.Builder<LPSubjectReference, Boolean> ret = ImmutableMap.builder();
 
-            List<HeldPermission<UUID>> lookup = this.plugin.getStorage().getUsersWithPermission(permission).join();
+            List<HeldPermission<UUID>> lookup = this.plugin.getStorage().getUsersWithPermission(Constraint.of(StandardComparison.EQUAL, permission)).join();
             for (HeldPermission<UUID> holder : lookup) {
                 if (holder.asNode().getFullContexts().equals(ImmutableContextSet.empty())) {
-                    ret.put(SubjectReferenceFactory.obtain(getService(), getIdentifier(), holder.getHolder().toString()), holder.getValue());
+                    ret.put(getService().getReferenceFactory().obtain(getIdentifier(), holder.getHolder().toString()), holder.getValue());
                 }
             }
 
             return ret.build();
-        }, this.plugin.getScheduler().async());
+        }, this.plugin.getBootstrap().getScheduler().async());
     }
 
     @Override
@@ -229,15 +227,15 @@ public class SpongeUserManager extends AbstractUserManager<SpongeUser> implement
         return CompletableFuture.supplyAsync(() -> {
             ImmutableMap.Builder<LPSubjectReference, Boolean> ret = ImmutableMap.builder();
 
-            List<HeldPermission<UUID>> lookup = this.plugin.getStorage().getUsersWithPermission(permission).join();
+            List<HeldPermission<UUID>> lookup = this.plugin.getStorage().getUsersWithPermission(Constraint.of(StandardComparison.EQUAL, permission)).join();
             for (HeldPermission<UUID> holder : lookup) {
                 if (holder.asNode().getFullContexts().equals(contexts)) {
-                    ret.put(SubjectReferenceFactory.obtain(getService(), getIdentifier(), holder.getHolder().toString()), holder.getValue());
+                    ret.put(getService().getReferenceFactory().obtain(getIdentifier(), holder.getHolder().toString()), holder.getValue());
                 }
             }
 
             return ret.build();
-        }, this.plugin.getScheduler().async());
+        }, this.plugin.getBootstrap().getScheduler().async());
     }
 
     @Override
@@ -260,7 +258,7 @@ public class SpongeUserManager extends AbstractUserManager<SpongeUser> implement
 
     @Override
     public LPSubject getDefaults() {
-        return getService().getDefaultSubjects().loadSubject(getIdentifier()).join();
+        return getService().getDefaultSubjects().getTypeDefaults(getIdentifier());
     }
 
 }

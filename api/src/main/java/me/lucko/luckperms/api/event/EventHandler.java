@@ -30,7 +30,7 @@ import java.util.function.Consumer;
 import javax.annotation.Nonnull;
 
 /**
- * Represents a handler for a LuckPerms event
+ * Represents a subscription to a {@link LuckPermsEvent}.
  *
  * @param <T> the event class
  */
@@ -64,7 +64,7 @@ public interface EventHandler<T extends LuckPermsEvent> extends AutoCloseable {
      * @return the event consumer
      */
     @Nonnull
-    Consumer<T> getConsumer();
+    Consumer<? super T> getConsumer();
 
     /**
      * Gets the number of times this handler has been called

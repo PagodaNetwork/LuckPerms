@@ -28,22 +28,23 @@ package me.lucko.luckperms.bukkit.migration;
 import me.lucko.luckperms.api.ChatMetaType;
 import me.lucko.luckperms.api.Node;
 import me.lucko.luckperms.api.event.cause.CreationCause;
-import me.lucko.luckperms.common.commands.CommandPermission;
-import me.lucko.luckperms.common.commands.CommandResult;
-import me.lucko.luckperms.common.commands.abstraction.SubCommand;
-import me.lucko.luckperms.common.commands.impl.migration.MigrationUtils;
-import me.lucko.luckperms.common.commands.sender.Sender;
-import me.lucko.luckperms.common.locale.CommandSpec;
+import me.lucko.luckperms.common.command.CommandResult;
+import me.lucko.luckperms.common.command.abstraction.SubCommand;
+import me.lucko.luckperms.common.command.access.CommandPermission;
+import me.lucko.luckperms.common.commands.migration.MigrationUtils;
 import me.lucko.luckperms.common.locale.LocaleManager;
-import me.lucko.luckperms.common.logging.ProgressLogger;
+import me.lucko.luckperms.common.locale.command.CommandSpec;
 import me.lucko.luckperms.common.model.Group;
 import me.lucko.luckperms.common.model.PermissionHolder;
 import me.lucko.luckperms.common.model.Track;
 import me.lucko.luckperms.common.model.User;
-import me.lucko.luckperms.common.node.NodeFactory;
+import me.lucko.luckperms.common.node.factory.NodeFactory;
+import me.lucko.luckperms.common.node.model.NodeTypes;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
+import me.lucko.luckperms.common.sender.Sender;
+import me.lucko.luckperms.common.utils.Iterators;
 import me.lucko.luckperms.common.utils.Predicates;
-import me.lucko.luckperms.common.utils.SafeIteration;
+import me.lucko.luckperms.common.utils.ProgressLogger;
 
 import org.bukkit.Bukkit;
 import org.tyrannyofheaven.bukkit.zPermissions.ZPermissionsService;
@@ -64,7 +65,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class MigrationZPermissions extends SubCommand<Object> {
     public MigrationZPermissions(LocaleManager locale) {
-        super(CommandSpec.MIGRATION_COMMAND.spec(locale), "zpermissions", CommandPermission.MIGRATION, Predicates.alwaysFalse());
+        super(CommandSpec.MIGRATION_COMMAND.localize(locale), "zpermissions", CommandPermission.MIGRATION, Predicates.alwaysFalse());
     }
 
     @Override
@@ -76,12 +77,12 @@ public class MigrationZPermissions extends SubCommand<Object> {
         log.log("Starting.");
         
         if (!Bukkit.getPluginManager().isPluginEnabled("zPermissions")) {
-            log.logErr("Plugin not loaded.");
+            log.logError("Plugin not loaded.");
             return CommandResult.STATE_ERROR;
         }
 
         if (!Bukkit.getServicesManager().isProvidedFor(ZPermissionsService.class)) {
-            log.logErr("Plugin not loaded.");
+            log.logError("Plugin not loaded.");
             return CommandResult.STATE_ERROR;
         }
 
@@ -104,7 +105,7 @@ public class MigrationZPermissions extends SubCommand<Object> {
 
         AtomicInteger groupCount = new AtomicInteger(0);
         AtomicInteger maxWeight = new AtomicInteger(0);
-        SafeIteration.iterate(internalService.getEntities(true), entity -> {
+        Iterators.iterate(internalService.getEntities(true), entity -> {
             String groupName = MigrationUtils.standardizeName(entity.getDisplayName());
             Group group = plugin.getStorage().createAndLoadGroup(groupName, CreationCause.INTERNAL).join();
 
@@ -116,7 +117,7 @@ public class MigrationZPermissions extends SubCommand<Object> {
             // store user data for later
             Set<Membership> members = entity.getMemberships();
             for (Membership membership : members) {
-                UUID uuid = BukkitMigrationUtils.lookupUuid(log, membership.getMember());
+                UUID uuid = BukkitUuids.lookupUuid(log, membership.getMember());
                 if (uuid == null) {
                     continue;
                 }
@@ -138,7 +139,7 @@ public class MigrationZPermissions extends SubCommand<Object> {
         // Migrate all tracks
         log.log("Starting track migration.");
         AtomicInteger trackCount = new AtomicInteger(0);
-        SafeIteration.iterate(service.getAllTracks(), t -> {
+        Iterators.iterate(service.getAllTracks(), t -> {
             String trackName = MigrationUtils.standardizeName(t);
             Track track = plugin.getStorage().createAndLoadTrack(trackName, CreationCause.INTERNAL).join();
             track.setGroups(service.getTrackGroups(t));
@@ -156,7 +157,7 @@ public class MigrationZPermissions extends SubCommand<Object> {
         Set<UUID> usersToMigrate = new HashSet<>(userParents.keySet());
         usersToMigrate.addAll(service.getAllPlayersUUID());
 
-        SafeIteration.iterate(usersToMigrate, u -> {
+        Iterators.iterate(usersToMigrate, u -> {
             PermissionEntity entity = internalService.getEntity(null, u, false);
 
             String username = null;
@@ -211,13 +212,18 @@ public class MigrationZPermissions extends SubCommand<Object> {
 
         for (EntityMetadata metadata : entity.getMetadata()) {
             String key = metadata.getName().toLowerCase();
-            if (key.isEmpty() || metadata.getStringValue().isEmpty()) continue;
+            Object value = metadata.getValue();
 
-            if (key.equals(NodeFactory.PREFIX_KEY) || key.equals(NodeFactory.SUFFIX_KEY)) {
+            if (key.isEmpty() || value == null) continue;
+
+            String valueString = value.toString();
+            if (valueString.isEmpty()) continue;
+
+            if (key.equals(NodeTypes.PREFIX_KEY) || key.equals(NodeTypes.SUFFIX_KEY)) {
                 ChatMetaType type = ChatMetaType.valueOf(key.toUpperCase());
-                holder.setPermission(NodeFactory.buildChatMetaNode(type, weight, metadata.getStringValue()).build());
+                holder.setPermission(NodeFactory.buildChatMetaNode(type, weight, valueString).build());
             } else {
-                holder.setPermission(NodeFactory.buildMetaNode(key, metadata.getStringValue()).build());
+                holder.setPermission(NodeFactory.buildMetaNode(key, valueString).build());
             }
         }
     }

@@ -32,7 +32,7 @@ import me.lucko.luckperms.api.event.LuckPermsEvent;
 import javax.annotation.Nonnull;
 
 /**
- * Called when a users {@link me.lucko.luckperms.api.caching.UserData} is loaded.
+ * Called when a users {@link UserData} is loaded.
  */
 public interface UserCacheLoadEvent extends LuckPermsEvent {
 

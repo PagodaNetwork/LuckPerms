@@ -30,7 +30,7 @@ import com.google.common.collect.ImmutableMap;
 
 import me.lucko.luckperms.api.Tristate;
 import me.lucko.luckperms.api.context.ImmutableContextSet;
-import me.lucko.luckperms.sponge.service.reference.LPSubjectReference;
+import me.lucko.luckperms.common.model.NodeMapType;
 
 import org.spongepowered.api.service.permission.SubjectData;
 
@@ -41,7 +41,11 @@ import java.util.concurrent.CompletableFuture;
  */
 public interface LPSubjectData {
 
+    SubjectData sponge();
+
     LPSubject getParentSubject();
+
+    NodeMapType getType();
 
     /* permissions */
 

@@ -25,13 +25,16 @@
 
 package me.lucko.luckperms.common.inheritance;
 
-import com.github.benmanes.caffeine.cache.Caffeine;
-import com.github.benmanes.caffeine.cache.LoadingCache;
-
 import me.lucko.luckperms.api.Contexts;
+import me.lucko.luckperms.api.LookupSetting;
+import me.lucko.luckperms.api.Node;
+import me.lucko.luckperms.common.model.Group;
+import me.lucko.luckperms.common.model.PermissionHolder;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
 
-import java.util.concurrent.TimeUnit;
+import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
 
 /**
  * Provides {@link InheritanceGraph}s.
@@ -44,17 +47,15 @@ public class InheritanceHandler {
      */
     private final InheritanceGraph nonContextualGraph;
 
-    /**
-     * Cache of contextual inheritance graph instances
-     */
-    private final LoadingCache<Contexts, InheritanceGraph> contextualGraphs;
+    // some cached contextual graphs for common Contexts
+    private final InheritanceGraph allowAllContextualGraph;
+    private final InheritanceGraph globalContextualGraph;
 
     public InheritanceHandler(LuckPermsPlugin plugin) {
         this.plugin = plugin;
-        this.nonContextualGraph = new InheritanceGraph.NonContextual(plugin);
-        this.contextualGraphs = Caffeine.newBuilder()
-                .expireAfterAccess(10, TimeUnit.MINUTES)
-                .build(key -> new InheritanceGraph.Contextual(this.plugin, key));
+        this.nonContextualGraph = new NonContextualGraph(plugin);
+        this.allowAllContextualGraph = new ContextualGraph(plugin, Contexts.allowAll());
+        this.globalContextualGraph = new ContextualGraph(plugin, Contexts.global());
     }
 
     public InheritanceGraph getGraph() {
@@ -62,7 +63,67 @@ public class InheritanceHandler {
     }
 
     public InheritanceGraph getGraph(Contexts contexts) {
-        return this.contextualGraphs.get(contexts);
+        if (contexts == Contexts.allowAll()) {
+            return this.allowAllContextualGraph;
+        }
+        if (contexts == Contexts.global()) {
+            return this.globalContextualGraph;
+        }
+
+        return new ContextualGraph(this.plugin, contexts);
+    }
+
+    private static final class NonContextualGraph implements InheritanceGraph {
+        private final LuckPermsPlugin plugin;
+
+        NonContextualGraph(LuckPermsPlugin plugin) {
+            this.plugin = plugin;
+        }
+
+        @Override
+        public Iterable<? extends PermissionHolder> successors(PermissionHolder holder) {
+            Set<Group> successors = new TreeSet<>(holder.getInheritanceComparator());
+            List<? extends Node> nodes = holder.getOwnGroupNodes();
+            for (Node n : nodes) {
+                Group g = this.plugin.getGroupManager().getIfLoaded(n.getGroupName());
+                if (g != null) {
+                    successors.add(g);
+                }
+            }
+            return successors;
+        }
+    }
+
+    private static final class ContextualGraph implements InheritanceGraph {
+        private final LuckPermsPlugin plugin;
+
+        /**
+         * The contexts to resolve inheritance in.
+         */
+        private final Contexts context;
+
+        ContextualGraph(LuckPermsPlugin plugin, Contexts context) {
+            this.plugin = plugin;
+            this.context = context;
+        }
+
+        @Override
+        public Iterable<? extends PermissionHolder> successors(PermissionHolder holder) {
+            Set<Group> successors = new TreeSet<>(holder.getInheritanceComparator());
+            List<? extends Node> nodes = holder.getOwnGroupNodes(this.context.getContexts());
+            for (Node n : nodes) {
+                // effectively: if not (we're applying global groups or it's specific anyways)
+                if (!((this.context.hasSetting(LookupSetting.APPLY_PARENTS_SET_WITHOUT_SERVER) || n.isServerSpecific()) && (this.context.hasSetting(LookupSetting.APPLY_PARENTS_SET_WITHOUT_WORLD) || n.isWorldSpecific()))) {
+                    continue;
+                }
+
+                Group g = this.plugin.getGroupManager().getIfLoaded(n.getGroupName());
+                if (g != null) {
+                    successors.add(g);
+                }
+            }
+            return successors;
+        }
     }
 
 }

@@ -26,10 +26,10 @@
 package me.lucko.luckperms.sponge.service.model;
 
 import com.google.common.collect.ImmutableCollection;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 
-import me.lucko.luckperms.sponge.service.reference.LPSubjectReference;
+import me.lucko.luckperms.common.contexts.ContextManager;
+import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
 import me.lucko.luckperms.sponge.service.reference.SubjectReferenceFactory;
 
 import org.spongepowered.api.plugin.PluginContainer;
@@ -38,7 +38,6 @@ import org.spongepowered.api.service.permission.PermissionService;
 import org.spongepowered.api.service.permission.Subject;
 import org.spongepowered.api.text.Text;
 
-import java.util.Collection;
 import java.util.Optional;
 import java.util.function.Predicate;
 
@@ -47,7 +46,9 @@ import java.util.function.Predicate;
  */
 public interface LPPermissionService {
 
-    LuckPermsSpongePlugin getPlugin();
+    LuckPermsPlugin getPlugin();
+
+    ContextManager<Subject> getContextManager();
 
     SubjectReferenceFactory getReferenceFactory();
 
@@ -59,7 +60,7 @@ public interface LPPermissionService {
 
     LPSubjectCollection getDefaultSubjects();
 
-    LPSubject getDefaults();
+    LPSubject getRootDefaults();
 
     Predicate<String> getIdentifierValidityPredicate();
 
@@ -75,8 +76,5 @@ public interface LPPermissionService {
 
     void registerContextCalculator(ContextCalculator<Subject> calculator);
 
-    // utils
-    ImmutableList<LPSubjectReference> sortSubjects(Collection<LPSubjectReference> s);
-
-    void invalidateAllCaches(LPSubject.CacheLevel cacheLevel);
+    void invalidateAllCaches();
 }

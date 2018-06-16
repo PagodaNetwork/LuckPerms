@@ -25,6 +25,8 @@
 
 package me.lucko.luckperms.api;
 
+import me.lucko.luckperms.api.context.ContextSet;
+
 import java.util.List;
 
 import javax.annotation.Nonnull;
@@ -89,6 +91,28 @@ public interface Track {
     String getPrevious(@Nonnull Group current);
 
     /**
+     * Promotes the given user along this track.
+     *
+     * @param user the user to promote
+     * @param contextSet the contexts to promote the user in
+     * @return the result of the action
+     * @since 4.2
+     */
+    @Nonnull
+    PromotionResult promote(@Nonnull User user, @Nonnull ContextSet contextSet);
+
+    /**
+     * Demotes the given user along this track.
+     *
+     * @param user the user to demote
+     * @param contextSet the contexts to demote the user in
+     * @return the result of the action
+     * @since 4.2
+     */
+    @Nonnull
+    DemotionResult demote(@Nonnull User user, @Nonnull ContextSet contextSet);
+
+    /**
      * Appends a group to the end of this track
      *
      * @param group the group to append
@@ -96,6 +120,7 @@ public interface Track {
      * @throws NullPointerException      if the group is null
      * @throws IllegalStateException     if the group instance was not obtained from LuckPerms.
      */
+    @Nonnull
     DataMutateResult appendGroup(@Nonnull Group group);
 
     /**
@@ -108,6 +133,7 @@ public interface Track {
      * @throws NullPointerException      if the group is null
      * @throws IllegalStateException     if the group instance was not obtained from LuckPerms.
      */
+    @Nonnull
     DataMutateResult insertGroup(@Nonnull Group group, int position) throws IndexOutOfBoundsException;
 
     /**
@@ -118,6 +144,7 @@ public interface Track {
      * @throws NullPointerException  if the group is null
      * @throws IllegalStateException if the group instance was not obtained from LuckPerms.
      */
+    @Nonnull
     DataMutateResult removeGroup(@Nonnull Group group);
 
     /**
@@ -127,6 +154,7 @@ public interface Track {
      * @return the result of the operation
      * @throws NullPointerException if the group is null
      */
+    @Nonnull
     DataMutateResult removeGroup(@Nonnull String group);
 
     /**

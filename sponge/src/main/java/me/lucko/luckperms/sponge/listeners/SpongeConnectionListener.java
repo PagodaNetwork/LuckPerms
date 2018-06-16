@@ -26,9 +26,9 @@
 package me.lucko.luckperms.sponge.listeners;
 
 import me.lucko.luckperms.common.config.ConfigKeys;
-import me.lucko.luckperms.common.locale.Message;
+import me.lucko.luckperms.common.locale.message.Message;
 import me.lucko.luckperms.common.model.User;
-import me.lucko.luckperms.common.utils.AbstractLoginListener;
+import me.lucko.luckperms.common.plugin.util.AbstractConnectionListener;
 import me.lucko.luckperms.sponge.LPSpongePlugin;
 
 import org.spongepowered.api.entity.living.player.Player;
@@ -45,7 +45,7 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 
-public class SpongeConnectionListener extends AbstractLoginListener {
+public class SpongeConnectionListener extends AbstractConnectionListener {
     private final LPSpongePlugin plugin;
 
     private final Set<UUID> deniedAsyncLogin = Collections.synchronizedSet(new HashSet<>());
@@ -62,14 +62,14 @@ public class SpongeConnectionListener extends AbstractLoginListener {
         /* Called when the player first attempts a connection with the server.
            Listening on AFTER_PRE priority to allow plugins to modify username / UUID data here. (auth plugins) */
 
-        final GameProfile p = e.getProfile();
-        final String username = p.getName().orElseThrow(() -> new RuntimeException("No username present for user " + p.getUniqueId()));
+        final GameProfile profile = e.getProfile();
+        final String username = profile.getName().orElseThrow(() -> new RuntimeException("No username present for user " + profile.getUniqueId()));
 
         if (this.plugin.getConfiguration().get(ConfigKeys.DEBUG_LOGINS)) {
-            this.plugin.getLog().info("Processing auth event for " + p.getUniqueId() + " - " + p.getName());
+            this.plugin.getLogger().info("Processing auth event for " + profile.getUniqueId() + " - " + profile.getName());
         }
 
-        this.plugin.getUniqueConnections().add(p.getUniqueId());
+        recordConnection(profile.getUniqueId());
 
         /* Actually process the login for the connection.
            We do this here to delay the login until the data is ready.
@@ -81,13 +81,13 @@ public class SpongeConnectionListener extends AbstractLoginListener {
            - creating a user instance in the UserManager for this connection.
            - setting up cached data. */
         try {
-            User user = loadUser(p.getUniqueId(), username);
-            this.plugin.getEventFactory().handleUserLoginProcess(p.getUniqueId(), username, user);
+            User user = loadUser(profile.getUniqueId(), username);
+            this.plugin.getEventFactory().handleUserLoginProcess(profile.getUniqueId(), username, user);
         } catch (Exception ex) {
-            this.plugin.getLog().severe("Exception occurred whilst loading data for " + p.getUniqueId() + " - " + p.getName());
+            this.plugin.getLogger().severe("Exception occurred whilst loading data for " + profile.getUniqueId() + " - " + profile.getName());
             ex.printStackTrace();
 
-            this.deniedAsyncLogin.add(p.getUniqueId());
+            this.deniedAsyncLogin.add(profile.getUniqueId());
 
             e.setCancelled(true);
             e.setMessageCancelled(false);
@@ -107,7 +107,7 @@ public class SpongeConnectionListener extends AbstractLoginListener {
 
             // This is a problem, as they were denied at low priority, but are now being allowed.
             if (e.isCancelled()) {
-                this.plugin.getLog().severe("Player connection was re-allowed for " + e.getProfile().getUniqueId());
+                this.plugin.getLogger().severe("Player connection was re-allowed for " + e.getProfile().getUniqueId());
                 e.setCancelled(true);
             }
         }
@@ -120,19 +120,19 @@ public class SpongeConnectionListener extends AbstractLoginListener {
            At this point, the users data should be present and loaded.
            Listening on LOW priority to allow plugins to further modify data here. (auth plugins, etc.) */
 
-        final GameProfile player = e.getProfile();
+        final GameProfile profile = e.getProfile();
 
         if (this.plugin.getConfiguration().get(ConfigKeys.DEBUG_LOGINS)) {
-            this.plugin.getLog().info("Processing login event for " + player.getUniqueId() + " - " + player.getName());
+            this.plugin.getLogger().info("Processing login event for " + profile.getUniqueId() + " - " + profile.getName());
         }
 
-        final User user = this.plugin.getUserManager().getIfLoaded(player.getUniqueId());
+        final User user = this.plugin.getUserManager().getIfLoaded(profile.getUniqueId());
 
         /* User instance is null for whatever reason. Could be that it was unloaded between asyncpre and now. */
         if (user == null) {
-            this.deniedLogin.add(player.getUniqueId());
+            this.deniedLogin.add(profile.getUniqueId());
 
-            this.plugin.getLog().warn("User " + player.getUniqueId() + " - " + player.getName() + " doesn't have data pre-loaded. - denying login.");
+            this.plugin.getLogger().warn("User " + profile.getUniqueId() + " - " + profile.getName() + " doesn't have data pre-loaded. - denying login.");
             e.setCancelled(true);
             e.setMessageCancelled(false);
             //noinspection deprecation
@@ -150,7 +150,7 @@ public class SpongeConnectionListener extends AbstractLoginListener {
         if (this.deniedLogin.remove(e.getProfile().getUniqueId())) {
             // This is a problem, as they were denied at low priority, but are now being allowed.
             if (!e.isCancelled()) {
-                this.plugin.getLog().severe("Player connection was re-allowed for " + e.getProfile().getUniqueId());
+                this.plugin.getLogger().severe("Player connection was re-allowed for " + e.getProfile().getUniqueId());
                 e.setCancelled(true);
             }
         }
@@ -165,7 +165,7 @@ public class SpongeConnectionListener extends AbstractLoginListener {
         this.plugin.getUserManager().getHouseKeeper().registerUsage(player.getUniqueId());
 
         // force a clear of transient nodes
-        this.plugin.getScheduler().doAsync(() -> {
+        this.plugin.getBootstrap().getScheduler().executeAsync(() -> {
             User user = this.plugin.getUserManager().getIfLoaded(player.getUniqueId());
             if (user != null) {
                 user.clearTransientNodes();

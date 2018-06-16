@@ -26,13 +26,14 @@
 package me.lucko.luckperms.sponge.service.proxy.api6;
 
 import me.lucko.luckperms.api.context.ImmutableContextSet;
+import me.lucko.luckperms.common.contexts.ContextManager;
+import me.lucko.luckperms.common.contexts.ContextsCache;
 import me.lucko.luckperms.common.utils.ImmutableCollectors;
 import me.lucko.luckperms.sponge.service.CompatibilityUtil;
 import me.lucko.luckperms.sponge.service.model.LPPermissionService;
 import me.lucko.luckperms.sponge.service.model.LPSubject;
+import me.lucko.luckperms.sponge.service.model.LPSubjectReference;
 import me.lucko.luckperms.sponge.service.model.ProxiedSubject;
-import me.lucko.luckperms.sponge.service.reference.LPSubjectReference;
-import me.lucko.luckperms.sponge.service.reference.SubjectReferenceFactory;
 
 import org.spongepowered.api.command.CommandSource;
 import org.spongepowered.api.service.context.Context;
@@ -53,6 +54,8 @@ public final class SubjectProxy implements Subject, ProxiedSubject {
     private final LPPermissionService service;
     private final LPSubjectReference ref;
 
+    private ContextsCache<Subject> contextsCache = null;
+
     public SubjectProxy(LPPermissionService service, LPSubjectReference ref) {
         this.service = service;
         this.ref = ref;
@@ -60,6 +63,15 @@ public final class SubjectProxy implements Subject, ProxiedSubject {
 
     private CompletableFuture<LPSubject> handle() {
         return this.ref.resolveLp();
+    }
+
+    // lazy init
+    private ContextsCache<Subject> getContextsCache() {
+        if (this.contextsCache == null) {
+            ContextManager<Subject> contextManager = (ContextManager<Subject>) this.service.getPlugin().getContextManager();
+            this.contextsCache = contextManager.getCacheFor(this);
+        }
+        return this.contextsCache;
     }
 
     @Nonnull
@@ -110,7 +122,7 @@ public final class SubjectProxy implements Subject, ProxiedSubject {
     public boolean isChildOf(@Nonnull Subject parent) {
         return handle().thenApply(handle -> handle.isChildOf(
                 ImmutableContextSet.empty(),
-                SubjectReferenceFactory.obtain(this.service, parent)
+                this.service.getReferenceFactory().obtain(parent)
         )).join();
     }
 
@@ -118,7 +130,7 @@ public final class SubjectProxy implements Subject, ProxiedSubject {
     public boolean isChildOf(@Nonnull Set<Context> contexts, @Nonnull Subject parent) {
         return handle().thenApply(handle -> handle.isChildOf(
                 CompatibilityUtil.convertContexts(contexts),
-                SubjectReferenceFactory.obtain(this.service, parent)
+                this.service.getReferenceFactory().obtain(parent)
         )).join();
     }
 
@@ -158,7 +170,12 @@ public final class SubjectProxy implements Subject, ProxiedSubject {
     @Nonnull
     @Override
     public Set<Context> getActiveContexts() {
-        return CompatibilityUtil.convertContexts(this.service.getPlugin().getContextManager().getApplicableContext(this));
+        return CompatibilityUtil.convertContexts(getContextsCache().getContextSet());
+    }
+
+    @Override
+    public ImmutableContextSet getActiveContextSet() {
+        return getContextsCache().getContextSet();
     }
 
     @Override

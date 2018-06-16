@@ -43,14 +43,14 @@ public enum Dependency {
     ASM(
             "org.ow2.asm",
             "asm",
-            "6.0",
-            "3Ylxx0pOaXiZqOlcquTqh2DqbEhtxrl7F5XnV2BCBGE="
+            "6.2",
+            "kXvaiIvFQxhzJdX7wQNCB+7RUldO943xc0ygruQLf8g="
     ),
     ASM_COMMONS(
             "org.ow2.asm",
             "asm-commons",
-            "6.0",
-            "8bzlxkipagF73NAf5dWa+YRSl/17ebgcAVpvu9lxmr8="
+            "6.2",
+            "FVRZE9sGyYeqQE8CjjNQHZ8n+M7WEvc3J+NUesTeh4w="
     ),
     JAR_RELOCATOR(
             "me.lucko",
@@ -59,6 +59,13 @@ public enum Dependency {
             "mmz3ltQbS8xXGA2scM0ZH6raISlt4nukjCiU2l9Jxfs="
     ),
 
+    TEXT(
+            "net{}kyori",
+            "text",
+            "1.11-1.4.0",
+            "drQpwf+oI1+DPrn0iCvEtoID+xXR3dpZK5ySaBrUiok=",
+            Relocation.of("text", "net{}kyori{}text")
+    ),
     CAFFEINE(
             "com{}github{}ben-manes{}caffeine",
             "caffeine",
@@ -69,15 +76,15 @@ public enum Dependency {
     OKIO(
             "com{}squareup{}" + RelocationHelper.OKIO_STRING,
             RelocationHelper.OKIO_STRING,
-            "1.13.0",
-            "c0Jpw+vFCQ47I1ZttVj0IfC0AnJ3x5rV0Xa47BaLuFA=",
+            "1.14.1",
+            "InCF6E8zEsc1QxiVJF3nwKe29qUK30KayCVqFQoR7ck=",
             Relocation.of(RelocationHelper.OKIO_STRING, RelocationHelper.OKIO_STRING)
     ),
     OKHTTP(
             "com{}squareup{}" + RelocationHelper.OKHTTP3_STRING,
             "okhttp",
-            "3.9.1",
-            "oNAQF6QruiblB/xtRIuzblNvS25hL3xC3jC72sK3eF4=",
+            "3.10.0",
+            "Sso+VSr7HOtH+JVmhfYpWiduSfoD+QZvi2voO+xW+2Y=",
             Relocation.allOf(
                     Relocation.of(RelocationHelper.OKHTTP3_STRING, RelocationHelper.OKHTTP3_STRING),
                     Relocation.of(RelocationHelper.OKIO_STRING, RelocationHelper.OKIO_STRING)
@@ -86,15 +93,15 @@ public enum Dependency {
     MARIADB_DRIVER(
             "org{}mariadb{}jdbc",
             "mariadb-java-client",
-            "2.2.1",
-            "K/WUWx66IX2PpclGA6Eeczs5FyuzqBdcmS/IzNLzKW8=",
+            "2.2.5",
+            "kFfgzoMFrFKirAFh/DgobV7vAu9NhdnhZLHD4/PCddI=",
             Relocation.of("mariadb", "org{}mariadb{}jdbc")
     ),
     MYSQL_DRIVER(
             "mysql",
             "mysql-connector-java",
-            "5.1.45",
-            "WbqXFalbltVXkMdH8kxUmr1kXNHpQdrlSxOMATMwDWQ=",
+            "5.1.46",
+            "MSIIl2HmQD8C6Kge1KLWWi4QKXNGUboA8uqS2SD/ex4=",
             Relocation.of("mysql", "com{}mysql")
     ),
     POSTGRESQL_DRIVER(
@@ -107,8 +114,8 @@ public enum Dependency {
     H2_DRIVER(
             "com.h2database",
             "h2",
-            "1.4.196",
-            "CgX0oNW4WEAUiq3OY6QjtdPDbvRHVjibT6rQjScz+vU="
+            "1.4.197",
+            "N/UhbhSvJ3KTDf+bhzQ1PwqA6Juj8z4GVEHeZTfF6EI="
             // we don't apply relocations to h2 - it gets loaded via
             // an isolated classloader
     ),
@@ -123,8 +130,8 @@ public enum Dependency {
     HIKARI(
             "com{}zaxxer",
             "HikariCP",
-            "2.7.8",
-            "nmp5eJvNRsz/4fxakr4re5Tdx/U4wy8BlSU2si0j/ZY=",
+            "3.2.0",
+            "sAjeaLvYWBH0tujwhg0JZsastPLnX6vUbsIJRWnL7+s=",
             Relocation.of("hikari", "com{}zaxxer{}hikari")
     ),
     SLF4J_SIMPLE(
@@ -142,8 +149,8 @@ public enum Dependency {
     MONGODB_DRIVER(
             "org.mongodb",
             "mongo-java-driver",
-            "3.6.1",
-            "Po8eyOBWv8XjREKSFrQh/NKHvLabtOysxbEFiD35cEk=",
+            "3.7.1",
+            "yllBCqAZwWCNUoMPR0JWilqhVA46+9F47wIcnYOcoy4=",
             Relocation.allOf(
                     Relocation.of("mongodb", "com{}mongodb"),
                     Relocation.of("bson", "org{}bson")
@@ -163,36 +170,36 @@ public enum Dependency {
     COMMONS_POOL_2(
             "org.apache.commons",
             "commons-pool2",
-            "2.4.2",
-            "IREqpnNzPfzQRTVN33WzHh1GS5nI5RWXQ0myUyJUzFM=",
+            "2.5.0",
+            "IRhwQ8eZcdnISLlxhA3oQdoOXE3zDJI6lpFBMfue+Wk=",
             Relocation.of("commonspool2", "org{}apache{}commons{}pool2")
     ),
     CONFIGURATE_CORE(
-            "ninja{}leaping{}configurate",
+            "me{}lucko{}configurate",
             "configurate-core",
-            "3.3",
-            "4leBJEqj1kVszaifZeKNl4hgHxG5M+Nk5TJKkPW2s4Y=",
+            "3.5",
+            "J+1WnX1g5gr4ne8qA7DuBadLDOsZnOZjwHbdRmVgF6c=",
             Relocation.of("configurate", "ninja{}leaping{}configurate")
     ),
     CONFIGURATE_GSON(
-            "ninja{}leaping{}configurate",
+            "me{}lucko{}configurate",
             "configurate-gson",
-            "3.3",
-            "4HxrW3/ZKdn095x/W4gylQMNskdmteXYVxVv0UKGJA4=",
+            "3.5",
+            "Q3wp3xpqy41bJW3yUhbHOzm+NUkT4bUUBI2/AQLaa3c=",
             Relocation.of("configurate", "ninja{}leaping{}configurate")
     ),
     CONFIGURATE_YAML(
-            "ninja{}leaping{}configurate",
+            "me{}lucko{}configurate",
             "configurate-yaml",
-            "3.3",
-            "hgADp3g+xHHPD34bAuxMWtB+OQ718Tlw69jVp2KPJNk=",
+            "3.5",
+            "Dxr1o3EPbpOOmwraqu+cors8O/nKwJnhS5EiPkTb3fc=",
             Relocation.of("configurate", "ninja{}leaping{}configurate")
     ),
     CONFIGURATE_HOCON(
-            "ninja{}leaping{}configurate",
+            "me{}lucko{}configurate",
             "configurate-hocon",
-            "3.3",
-            "UIy5FVmsBUG6+Z1mpIEE2EXgtOI1ZL0p/eEW+BbtGLU=",
+            "3.5",
+            "sOym1KPmQylGSfk90ZFqobuvoZfEWb7XMmMBwbHuxFw=",
             Relocation.allOf(
                     Relocation.of("configurate", "ninja{}leaping{}configurate"),
                     Relocation.of("hocon", "com{}typesafe{}config")
@@ -201,9 +208,26 @@ public enum Dependency {
     HOCON_CONFIG(
             "com{}typesafe",
             "config",
-            "1.3.1",
-            "5vrfxhCCINOmuGqn5OFsnnu4V7pYlViGMIuxOXImSvA=",
+            "1.3.3",
+            "tfHWBx8VSNBb6C9Z+QOcfTeheHvY48Z34x7ida9KRiE=",
             Relocation.of("hocon", "com{}typesafe{}config")
+    ),
+    CONFIGURATE_TOML(
+            "me{}lucko{}configurate",
+            "configurate-toml",
+            "3.5",
+            "U8p0XSTaNT/uebvLpO/vb6AhVGQDYiZsauSGB9zolPU=",
+            Relocation.allOf(
+                    Relocation.of("configurate", "ninja{}leaping{}configurate"),
+                    Relocation.of("toml4j", "com{}moandjiezana{}toml")
+            )
+    ),
+    TOML4J(
+            "com{}moandjiezana{}toml",
+            "toml4j",
+            "0.7.2",
+            "9UdeY+fonl22IiNImux6Vr0wNUN3IHehfCy1TBnKOiA=",
+            Relocation.of("toml4j", "com{}moandjiezana{}toml")
     );
 
     private final String url;
@@ -267,7 +291,7 @@ public enum Dependency {
                 byte[] hash = digest.digest(bytes);
 
                 if (Arrays.equals(hash, dependency.getChecksum())) {
-                    System.out.println("MATCH " + dependency.name() + ": " + Base64.getEncoder().encodeToString(hash));
+                    System.out.println("MATCH    " + dependency.name() + ": " + Base64.getEncoder().encodeToString(hash));
                 } else {
                     System.out.println("NO MATCH " + dependency.name() + ": " + Base64.getEncoder().encodeToString(hash));
                 }

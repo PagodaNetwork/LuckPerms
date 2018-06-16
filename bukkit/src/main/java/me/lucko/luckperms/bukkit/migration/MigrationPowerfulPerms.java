@@ -35,21 +35,21 @@ import com.zaxxer.hikari.HikariDataSource;
 
 import me.lucko.luckperms.api.Node;
 import me.lucko.luckperms.api.event.cause.CreationCause;
-import me.lucko.luckperms.common.commands.CommandResult;
-import me.lucko.luckperms.common.commands.abstraction.SubCommand;
-import me.lucko.luckperms.common.commands.impl.migration.MigrationUtils;
-import me.lucko.luckperms.common.commands.sender.Sender;
+import me.lucko.luckperms.common.command.CommandResult;
+import me.lucko.luckperms.common.command.abstraction.SubCommand;
+import me.lucko.luckperms.common.commands.migration.MigrationUtils;
 import me.lucko.luckperms.common.config.ConfigKeys;
-import me.lucko.luckperms.common.locale.CommandSpec;
 import me.lucko.luckperms.common.locale.LocaleManager;
-import me.lucko.luckperms.common.logging.ProgressLogger;
+import me.lucko.luckperms.common.locale.command.CommandSpec;
 import me.lucko.luckperms.common.model.PermissionHolder;
 import me.lucko.luckperms.common.model.User;
-import me.lucko.luckperms.common.node.NodeFactory;
+import me.lucko.luckperms.common.node.factory.NodeFactory;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
+import me.lucko.luckperms.common.sender.Sender;
 import me.lucko.luckperms.common.storage.StorageType;
+import me.lucko.luckperms.common.utils.Iterators;
 import me.lucko.luckperms.common.utils.Predicates;
-import me.lucko.luckperms.common.utils.SafeIteration;
+import me.lucko.luckperms.common.utils.ProgressLogger;
 
 import org.bukkit.Bukkit;
 
@@ -68,12 +68,12 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static me.lucko.luckperms.common.commands.CommandPermission.MIGRATION;
+import static me.lucko.luckperms.common.command.access.CommandPermission.MIGRATION;
 
 // Only supports the latest versions of the PP API. (it seems to change randomly almost every release)
 public class MigrationPowerfulPerms extends SubCommand<Object> {
     public MigrationPowerfulPerms(LocaleManager locale) {
-        super(CommandSpec.MIGRATION_POWERFULPERMS.spec(locale), "powerfulperms", MIGRATION, Predicates.not(5));
+        super(CommandSpec.MIGRATION_POWERFULPERMS.localize(locale), "powerfulperms", MIGRATION, Predicates.not(5));
     }
 
     @Override
@@ -85,7 +85,7 @@ public class MigrationPowerfulPerms extends SubCommand<Object> {
         log.log("Starting.");
 
         if (!Bukkit.getPluginManager().isPluginEnabled("PowerfulPerms")) {
-            log.logErr("Plugin not loaded.");
+            log.logError("Plugin not loaded.");
             return CommandResult.STATE_ERROR;
         }
 
@@ -143,7 +143,7 @@ public class MigrationPowerfulPerms extends SubCommand<Object> {
         }
 
         if (uuids.isEmpty()) {
-            log.logErr("Unable to find any UUIDs to migrate.");
+            log.logError("Unable to find any UUIDs to migrate.");
             return CommandResult.FAILURE;
         }
 
@@ -159,7 +159,7 @@ public class MigrationPowerfulPerms extends SubCommand<Object> {
         // Groups first.
         log.log("Starting group migration.");
         AtomicInteger groupCount = new AtomicInteger(0);
-        SafeIteration.iterate(groups, g -> {
+        Iterators.iterate(groups, g -> {
             maxWeight.set(Math.max(maxWeight.get(), g.getRank()));
 
             String groupName = MigrationUtils.standardizeName(g.getName());
@@ -219,7 +219,7 @@ public class MigrationPowerfulPerms extends SubCommand<Object> {
         maxWeight.addAndGet(5);
 
         // Migrate all users and their groups
-        SafeIteration.iterate(uuids, uuid -> {
+        Iterators.iterate(uuids, uuid -> {
 
             // Create a LuckPerms user for the UUID
             User user = plugin.getStorage().loadUser(uuid, null).join();
@@ -347,7 +347,8 @@ public class MigrationPowerfulPerms extends SubCommand<Object> {
      */
     public static final class HikariSupplier implements AutoCloseable {
 
-        private final String address;
+        private final String host;
+        private final String port;
         private final String database;
         private final String username;
         private final String password;
@@ -355,10 +356,17 @@ public class MigrationPowerfulPerms extends SubCommand<Object> {
         private HikariDataSource hikari;
 
         public HikariSupplier(String address, String database, String username, String password) {
-            this.address = address;
             this.database = database;
             this.username = username;
             this.password = password;
+
+            String[] split = address.split(":");
+            if (split.length != 2) {
+                throw new IllegalArgumentException("Address argument should be in the format hostname:port");
+            }
+
+            this.host = split[0];
+            this.port = split[1];
         }
 
         public void setup(String poolName) {
@@ -366,8 +374,8 @@ public class MigrationPowerfulPerms extends SubCommand<Object> {
             this.hikari.setPoolName(poolName);
             this.hikari.setMaximumPoolSize(2);
             this.hikari.setDataSourceClassName("com.mysql.jdbc.jdbc2.optional.MysqlDataSource");
-            this.hikari.addDataSourceProperty("serverName", this.address.split(":")[0]);
-            this.hikari.addDataSourceProperty("port", this.address.split(":")[1]);
+            this.hikari.addDataSourceProperty("serverName", this.host);
+            this.hikari.addDataSourceProperty("port", this.port);
             this.hikari.addDataSourceProperty("databaseName", this.database);
             this.hikari.addDataSourceProperty("user", this.username);
             this.hikari.addDataSourceProperty("password", this.password);

@@ -83,7 +83,7 @@ public class PermissionCalculator implements CacheLoader<String, Tristate> {
     public Tristate getPermissionValue(String permission, CheckOrigin origin) {
         // convert the permission to lowercase, as all values in the backing map are also lowercase.
         // this allows fast case insensitive lookups
-        permission = permission.toLowerCase().intern();
+        permission = permission.toLowerCase();
 
         // get the result
         Tristate result = this.lookupCache.get(permission);
@@ -100,7 +100,7 @@ public class PermissionCalculator implements CacheLoader<String, Tristate> {
         // offer the permission to the permission vault
         // we only need to do this once per permission, so it doesn't matter
         // that this call is behind the cache.
-        this.plugin.getPermissionVault().offer(permission);
+        this.plugin.getPermissionRegistry().offer(permission);
 
         for (PermissionProcessor processor : this.processors) {
             Tristate result = processor.hasPermission(permission);

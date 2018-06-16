@@ -34,28 +34,33 @@ import com.mongodb.ServerAddress;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoCursor;
 import com.mongodb.client.MongoDatabase;
+import com.mongodb.client.model.Filters;
 import com.mongodb.client.model.UpdateOptions;
 
 import me.lucko.luckperms.api.HeldPermission;
 import me.lucko.luckperms.api.LogEntry;
 import me.lucko.luckperms.api.Node;
+import me.lucko.luckperms.api.PlayerSaveResult;
 import me.lucko.luckperms.api.context.ContextSet;
 import me.lucko.luckperms.api.context.ImmutableContextSet;
 import me.lucko.luckperms.api.context.MutableContextSet;
 import me.lucko.luckperms.common.actionlog.ExtendedLogEntry;
 import me.lucko.luckperms.common.actionlog.Log;
 import me.lucko.luckperms.common.bulkupdate.BulkUpdate;
+import me.lucko.luckperms.common.bulkupdate.comparisons.Constraint;
 import me.lucko.luckperms.common.managers.group.GroupManager;
 import me.lucko.luckperms.common.managers.track.TrackManager;
 import me.lucko.luckperms.common.model.Group;
+import me.lucko.luckperms.common.model.NodeMapType;
 import me.lucko.luckperms.common.model.Track;
 import me.lucko.luckperms.common.model.User;
-import me.lucko.luckperms.common.node.LegacyNodeFactory;
-import me.lucko.luckperms.common.node.NodeFactory;
-import me.lucko.luckperms.common.node.NodeHeldPermission;
-import me.lucko.luckperms.common.node.NodeModel;
+import me.lucko.luckperms.common.model.UserIdentifier;
+import me.lucko.luckperms.common.node.factory.LegacyNodeFactory;
+import me.lucko.luckperms.common.node.factory.NodeFactory;
+import me.lucko.luckperms.common.node.model.NodeDataContainer;
+import me.lucko.luckperms.common.node.model.NodeHeldPermission;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
-import me.lucko.luckperms.common.references.UserIdentifier;
+import me.lucko.luckperms.common.storage.PlayerSaveResultImpl;
 import me.lucko.luckperms.common.storage.StorageCredentials;
 import me.lucko.luckperms.common.storage.dao.AbstractDao;
 
@@ -181,7 +186,7 @@ public class MongoDao extends AbstractDao {
                         .timestamp(d.getLong("timestamp"))
                         .actor(d.get("actor", UUID.class))
                         .actorName(d.getString("actorName"))
-                        .type(LogEntry.Type.valueOf(d.getString("type").toCharArray()[0]))
+                        .type(LogEntry.Type.valueOf(d.getString("type").charAt(0)))
                         .acted(actedUuid)
                         .actedName(d.getString("actedName"))
                         .action(d.getString("action"))
@@ -202,8 +207,8 @@ public class MongoDao extends AbstractDao {
                     Document d = cursor.next();
 
                     UUID uuid = d.get("_id", UUID.class);
-                    Set<NodeModel> nodes = new HashSet<>(nodesFromDoc(d));
-                    Set<NodeModel> results = nodes.stream()
+                    Set<NodeDataContainer> nodes = new HashSet<>(nodesFromDoc(d));
+                    Set<NodeDataContainer> results = nodes.stream()
                             .map(bulkUpdate::apply)
                             .filter(Objects::nonNull)
                             .collect(Collectors.toSet());
@@ -227,8 +232,8 @@ public class MongoDao extends AbstractDao {
                     Document d = cursor.next();
 
                     String holder = d.getString("_id");
-                    Set<NodeModel> nodes = new HashSet<>(nodesFromDoc(d));
-                    Set<NodeModel> results = nodes.stream()
+                    Set<NodeDataContainer> nodes = new HashSet<>(nodesFromDoc(d));
+                    Set<NodeDataContainer> results = nodes.stream()
                             .map(bulkUpdate::apply)
                             .filter(Objects::nonNull)
                             .collect(Collectors.toSet());
@@ -260,8 +265,8 @@ public class MongoDao extends AbstractDao {
                     String name = d.getString("name");
                     user.getPrimaryGroup().setStoredValue(d.getString("primaryGroup"));
 
-                    Set<Node> nodes = nodesFromDoc(d).stream().map(NodeModel::toNode).collect(Collectors.toSet());
-                    user.setEnduringNodes(nodes);
+                    Set<Node> nodes = nodesFromDoc(d).stream().map(NodeDataContainer::toNode).collect(Collectors.toSet());
+                    user.setNodes(NodeMapType.ENDURING, nodes);
                     user.setName(name, true);
 
                     boolean save = this.plugin.getUserManager().giveDefaultIfNeeded(user, false);
@@ -281,9 +286,9 @@ public class MongoDao extends AbstractDao {
                 }
             }
         } finally {
+            user.invalidateCachedData();
             user.getIoLock().unlock();
         }
-        user.getRefreshBuffer().requestDirectly();
         return user;
     }
 
@@ -316,7 +321,7 @@ public class MongoDao extends AbstractDao {
     }
 
     @Override
-    public List<HeldPermission<UUID>> getUsersWithPermission(String permission) {
+    public List<HeldPermission<UUID>> getUsersWithPermission(Constraint constraint) {
         List<HeldPermission<UUID>> held = new ArrayList<>();
         MongoCollection<Document> c = this.database.getCollection(this.prefix + "users");
         try (MongoCursor<Document> cursor = c.find().iterator()) {
@@ -324,9 +329,9 @@ public class MongoDao extends AbstractDao {
                 Document d = cursor.next();
                 UUID holder = d.get("_id", UUID.class);
 
-                Set<NodeModel> nodes = new HashSet<>(nodesFromDoc(d));
-                for (NodeModel e : nodes) {
-                    if (!e.getPermission().equalsIgnoreCase(permission)) {
+                Set<NodeDataContainer> nodes = new HashSet<>(nodesFromDoc(d));
+                for (NodeDataContainer e : nodes) {
+                    if (!constraint.eval(e.getPermission())) {
                         continue;
                     }
                     held.add(NodeHeldPermission.of(holder, e));
@@ -345,16 +350,16 @@ public class MongoDao extends AbstractDao {
             try (MongoCursor<Document> cursor = c.find(new Document("_id", group.getName())).iterator()) {
                 if (cursor.hasNext()) {
                     Document d = cursor.next();
-                    Set<Node> nodes = nodesFromDoc(d).stream().map(NodeModel::toNode).collect(Collectors.toSet());
-                    group.setEnduringNodes(nodes);
+                    Set<Node> nodes = nodesFromDoc(d).stream().map(NodeDataContainer::toNode).collect(Collectors.toSet());
+                    group.setNodes(NodeMapType.ENDURING, nodes);
                 } else {
                     c.insertOne(groupToDoc(group));
                 }
             }
         } finally {
+            group.invalidateCachedData();
             group.getIoLock().unlock();
         }
-        group.getRefreshBuffer().requestDirectly();
         return group;
     }
 
@@ -377,15 +382,15 @@ public class MongoDao extends AbstractDao {
                 }
 
                 Document d = cursor.next();
-                Set<Node> nodes = nodesFromDoc(d).stream().map(NodeModel::toNode).collect(Collectors.toSet());
-                group.setEnduringNodes(nodes);
+                Set<Node> nodes = nodesFromDoc(d).stream().map(NodeDataContainer::toNode).collect(Collectors.toSet());
+                group.setNodes(NodeMapType.ENDURING, nodes);
             }
         } finally {
             if (group != null) {
+                group.invalidateCachedData();
                 group.getIoLock().unlock();
             }
         }
-        group.getRefreshBuffer().requestDirectly();
         return Optional.of(group);
     }
 
@@ -443,7 +448,7 @@ public class MongoDao extends AbstractDao {
     }
 
     @Override
-    public List<HeldPermission<String>> getGroupsWithPermission(String permission) {
+    public List<HeldPermission<String>> getGroupsWithPermission(Constraint constraint) {
         List<HeldPermission<String>> held = new ArrayList<>();
         MongoCollection<Document> c = this.database.getCollection(this.prefix + "groups");
         try (MongoCursor<Document> cursor = c.find().iterator()) {
@@ -451,9 +456,9 @@ public class MongoDao extends AbstractDao {
                 Document d = cursor.next();
 
                 String holder = d.getString("_id");
-                Set<NodeModel> nodes = new HashSet<>(nodesFromDoc(d));
-                for (NodeModel e : nodes) {
-                    if (!e.getPermission().equalsIgnoreCase(permission)) {
+                Set<NodeDataContainer> nodes = new HashSet<>(nodesFromDoc(d));
+                for (NodeDataContainer e : nodes) {
+                    if (!constraint.eval(e.getPermission())) {
                         continue;
                     }
                     held.add(NodeHeldPermission.of(holder, e));
@@ -569,36 +574,60 @@ public class MongoDao extends AbstractDao {
     }
 
     @Override
-    public void saveUUIDData(UUID uuid, String username) {
+    public PlayerSaveResult savePlayerData(UUID uuid, String username) {
+        username = username.toLowerCase();
         MongoCollection<Document> c = this.database.getCollection(this.prefix + "uuid");
-        c.replaceOne(new Document("_id", uuid), new Document("_id", uuid).append("name", username.toLowerCase()), new UpdateOptions().upsert(true));
+
+        // find any existing mapping
+        String oldUsername = getPlayerName(uuid);
+
+        // do the insert
+        if (!username.equalsIgnoreCase(oldUsername)) {
+            c.replaceOne(new Document("_id", uuid), new Document("_id", uuid).append("name", username), new UpdateOptions().upsert(true));
+        }
+
+        PlayerSaveResultImpl result = PlayerSaveResultImpl.determineBaseResult(username, oldUsername);
+
+        Set<UUID> conflicting = new HashSet<>();
+        try (MongoCursor<Document> cursor = c.find(new Document("name", username)).iterator()) {
+            if (cursor.hasNext()) {
+                conflicting.add(cursor.next().get("_id", UUID.class));
+            }
+        }
+        conflicting.remove(uuid);
+
+        if (!conflicting.isEmpty()) {
+            // remove the mappings for conflicting uuids
+            c.deleteMany(Filters.and(conflicting.stream().map(u -> Filters.eq("_id", u)).collect(Collectors.toList())));
+            result = result.withOtherUuidsPresent(conflicting);
+        }
+
+        return result;
     }
 
     @Override
-    public UUID getUUID(String username) {
+    public UUID getPlayerUuid(String username) {
         MongoCollection<Document> c = this.database.getCollection(this.prefix + "uuid");
-        try (MongoCursor<Document> cursor = c.find(new Document("name", username.toLowerCase())).iterator()) {
-            if (cursor.hasNext()) {
-                return cursor.next().get("_id", UUID.class);
-            }
+        Document doc = c.find(new Document("name", username.toLowerCase())).first();
+        if (doc != null) {
+            return doc.get("_id", UUID.class);
         }
         return null;
     }
 
     @Override
-    public String getName(UUID uuid) {
+    public String getPlayerName(UUID uuid) {
         MongoCollection<Document> c = this.database.getCollection(this.prefix + "uuid");
-        try (MongoCursor<Document> cursor = c.find(new Document("_id", uuid)).iterator()) {
-            if (cursor.hasNext()) {
-                return cursor.next().get("name", String.class);
-            }
+        Document doc = c.find(new Document("_id", uuid)).first();
+        if (doc != null) {
+            return doc.get("name", String.class);
         }
         return null;
     }
 
     private static Document userToDoc(User user) {
-        List<Document> nodes = user.getEnduringNodes().values().stream()
-                .map(NodeModel::fromNode)
+        List<Document> nodes = user.enduringData().immutable().values().stream()
+                .map(NodeDataContainer::fromNode)
                 .map(MongoDao::nodeToDoc)
                 .collect(Collectors.toList());
 
@@ -608,8 +637,8 @@ public class MongoDao extends AbstractDao {
                 .append("permissions", nodes);
     }
 
-    private static List<NodeModel> nodesFromDoc(Document document) {
-        List<NodeModel> nodes = new ArrayList<>();
+    private static List<NodeDataContainer> nodesFromDoc(Document document) {
+        List<NodeDataContainer> nodes = new ArrayList<>();
 
         // legacy
         if (document.containsKey("perms") && document.get("perms") instanceof Map) {
@@ -618,7 +647,7 @@ public class MongoDao extends AbstractDao {
             for (Map.Entry<String, Boolean> e : permsMap.entrySet()) {
                 // legacy permission key deserialisation
                 String permission = e.getKey().replace("[**DOT**]", ".").replace("[**DOLLAR**]", "$");
-                nodes.add(NodeModel.fromNode(LegacyNodeFactory.fromLegacyString(permission, e.getValue())));
+                nodes.add(NodeDataContainer.fromNode(LegacyNodeFactory.fromLegacyString(permission, e.getValue())));
             }
         }
 
@@ -635,8 +664,8 @@ public class MongoDao extends AbstractDao {
     }
 
     private static Document groupToDoc(Group group) {
-        List<Document> nodes = group.getEnduringNodes().values().stream()
-                .map(NodeModel::fromNode)
+        List<Document> nodes = group.enduringData().immutable().values().stream()
+                .map(NodeDataContainer::fromNode)
                 .map(MongoDao::nodeToDoc)
                 .collect(Collectors.toList());
 
@@ -647,7 +676,7 @@ public class MongoDao extends AbstractDao {
         return new Document("_id", track.getName()).append("groups", track.getGroups());
     }
 
-    private static Document nodeToDoc(NodeModel node) {
+    private static Document nodeToDoc(NodeDataContainer node) {
         Document document = new Document();
 
         document.append("permission", node.getPermission());
@@ -672,7 +701,7 @@ public class MongoDao extends AbstractDao {
         return document;
     }
 
-    private static NodeModel nodeFromDoc(Document document) {
+    private static NodeDataContainer nodeFromDoc(Document document) {
         String permission = document.getString("permission");
         boolean value = true;
         String server = "global";
@@ -699,7 +728,7 @@ public class MongoDao extends AbstractDao {
             context = docsToContextSet(contexts).makeImmutable();
         }
 
-        return NodeModel.of(permission, value, server, world, expiry, context);
+        return NodeDataContainer.of(permission, value, server, world, expiry, context);
     }
 
     private static List<Document> contextSetToDocs(ContextSet contextSet) {

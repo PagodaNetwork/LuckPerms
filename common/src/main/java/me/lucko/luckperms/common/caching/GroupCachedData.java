@@ -25,8 +25,11 @@
 
 package me.lucko.luckperms.common.caching;
 
+import me.lucko.luckperms.api.Contexts;
 import me.lucko.luckperms.api.caching.GroupData;
+import me.lucko.luckperms.common.calculators.PermissionCalculatorMetadata;
 import me.lucko.luckperms.common.model.Group;
+import me.lucko.luckperms.common.model.HolderType;
 
 /**
  * Holds an easily accessible cache of a groups's data in a number of contexts
@@ -38,7 +41,7 @@ public class GroupCachedData extends HolderCachedData<Group> implements GroupDat
     }
 
     @Override
-    protected String getHolderName() {
-        return this.holder.getName();
+    protected PermissionCalculatorMetadata getMetadataForContexts(Contexts contexts) {
+        return PermissionCalculatorMetadata.of(HolderType.GROUP, this.holder.getFriendlyName(), contexts.getContexts());
     }
 }

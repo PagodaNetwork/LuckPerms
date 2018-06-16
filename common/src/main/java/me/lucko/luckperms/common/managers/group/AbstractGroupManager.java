@@ -28,6 +28,8 @@ package me.lucko.luckperms.common.managers.group;
 import me.lucko.luckperms.common.managers.AbstractManager;
 import me.lucko.luckperms.common.model.Group;
 
+import java.util.Optional;
+
 public abstract class AbstractGroupManager<T extends Group> extends AbstractManager<String, Group, T> implements GroupManager<T> {
 
     @Override
@@ -40,14 +42,16 @@ public abstract class AbstractGroupManager<T extends Group> extends AbstractMana
 
         // then try exact display name matches
         for (T group : getAll().values()) {
-            if (group.getDisplayName().isPresent() && group.getDisplayName().get().equals(name)) {
+            Optional<String> displayName = group.getDisplayName();
+            if (displayName.isPresent() && displayName.get().equals(name)) {
                 return group;
             }
         }
 
         // then try case insensitive name matches
         for (T group : getAll().values()) {
-            if (group.getDisplayName().isPresent() && group.getDisplayName().get().equalsIgnoreCase(name)) {
+            Optional<String> displayName = group.getDisplayName();
+            if (displayName.isPresent() && displayName.get().equalsIgnoreCase(name)) {
                 return group;
             }
         }

@@ -27,11 +27,13 @@ package me.lucko.luckperms.common.storage;
 
 import me.lucko.luckperms.api.HeldPermission;
 import me.lucko.luckperms.api.LogEntry;
+import me.lucko.luckperms.api.PlayerSaveResult;
 import me.lucko.luckperms.api.event.cause.CreationCause;
 import me.lucko.luckperms.api.event.cause.DeletionCause;
 import me.lucko.luckperms.common.actionlog.Log;
 import me.lucko.luckperms.common.api.delegates.model.ApiStorage;
 import me.lucko.luckperms.common.bulkupdate.BulkUpdate;
+import me.lucko.luckperms.common.bulkupdate.comparisons.Constraint;
 import me.lucko.luckperms.common.model.Group;
 import me.lucko.luckperms.common.model.Track;
 import me.lucko.luckperms.common.model.User;
@@ -55,8 +57,6 @@ public interface Storage {
 
     String getName();
 
-    Storage noBuffer();
-
     void init();
 
     void shutdown();
@@ -75,7 +75,7 @@ public interface Storage {
 
     CompletableFuture<Set<UUID>> getUniqueUsers();
 
-    CompletableFuture<List<HeldPermission<UUID>>> getUsersWithPermission(String permission);
+    CompletableFuture<List<HeldPermission<UUID>>> getUsersWithPermission(Constraint constraint);
 
     CompletableFuture<Group> createAndLoadGroup(String name, CreationCause cause);
 
@@ -87,7 +87,7 @@ public interface Storage {
 
     CompletableFuture<Void> deleteGroup(Group group, DeletionCause cause);
 
-    CompletableFuture<List<HeldPermission<String>>> getGroupsWithPermission(String permission);
+    CompletableFuture<List<HeldPermission<String>>> getGroupsWithPermission(Constraint constraint);
 
     CompletableFuture<Track> createAndLoadTrack(String name, CreationCause cause);
 
@@ -99,9 +99,9 @@ public interface Storage {
 
     CompletableFuture<Void> deleteTrack(Track track, DeletionCause cause);
 
-    CompletableFuture<Void> saveUUIDData(UUID uuid, String username);
+    CompletableFuture<PlayerSaveResult> savePlayerData(UUID uuid, String username);
 
-    CompletableFuture<UUID> getUUID(String username);
+    CompletableFuture<UUID> getPlayerUuid(String username);
 
-    CompletableFuture<String> getName(UUID uuid);
+    CompletableFuture<String> getPlayerName(UUID uuid);
 }

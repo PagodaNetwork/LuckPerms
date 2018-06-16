@@ -27,16 +27,16 @@ package me.lucko.luckperms.sponge.processors;
 
 import me.lucko.luckperms.api.context.ImmutableContextSet;
 import me.lucko.luckperms.common.processors.PermissionProcessor;
-import me.lucko.luckperms.sponge.service.LuckPermsService;
+import me.lucko.luckperms.sponge.service.model.LPPermissionService;
 import me.lucko.luckperms.sponge.service.model.LPSubject;
 
 public class UserDefaultsProcessor extends DefaultsProcessor implements PermissionProcessor {
-    public UserDefaultsProcessor(LuckPermsService service, ImmutableContextSet contexts) {
+    public UserDefaultsProcessor(LPPermissionService service, ImmutableContextSet contexts) {
         super(service, contexts);
     }
 
     @Override
-    protected LPSubject getTypeDefaults(LuckPermsService service) {
-        return service.getUserSubjects().getDefaults();
+    protected LPSubject getTypeDefaults() {
+        return this.service.getUserSubjects().getDefaults();
     }
 }

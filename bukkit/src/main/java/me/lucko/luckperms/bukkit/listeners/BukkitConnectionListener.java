@@ -29,9 +29,9 @@ import me.lucko.luckperms.bukkit.LPBukkitPlugin;
 import me.lucko.luckperms.bukkit.model.permissible.LPPermissible;
 import me.lucko.luckperms.bukkit.model.permissible.PermissibleInjector;
 import me.lucko.luckperms.common.config.ConfigKeys;
-import me.lucko.luckperms.common.locale.Message;
+import me.lucko.luckperms.common.locale.message.Message;
 import me.lucko.luckperms.common.model.User;
-import me.lucko.luckperms.common.utils.AbstractLoginListener;
+import me.lucko.luckperms.common.plugin.util.AbstractConnectionListener;
 
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -47,7 +47,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
-public class BukkitConnectionListener extends AbstractLoginListener implements Listener {
+public class BukkitConnectionListener extends AbstractConnectionListener implements Listener {
     private final LPBukkitPlugin plugin;
 
     private final Set<UUID> deniedAsyncLogin = Collections.synchronizedSet(new HashSet<>());
@@ -66,16 +66,16 @@ public class BukkitConnectionListener extends AbstractLoginListener implements L
         /* wait for the plugin to enable. because these events are fired async, they can be called before
            the plugin has enabled.  */
         try {
-            this.plugin.getEnableLatch().await(60, TimeUnit.SECONDS);
+            this.plugin.getBootstrap().getEnableLatch().await(60, TimeUnit.SECONDS);
         } catch (InterruptedException ex) {
             ex.printStackTrace();
         }
 
         if (this.plugin.getConfiguration().get(ConfigKeys.DEBUG_LOGINS)) {
-            this.plugin.getLog().info("Processing pre-login for " + e.getUniqueId() + " - " + e.getName());
+            this.plugin.getLogger().info("Processing pre-login for " + e.getUniqueId() + " - " + e.getName());
         }
 
-        this.plugin.getUniqueConnections().add(e.getUniqueId());
+        recordConnection(e.getUniqueId());
 
         /* Actually process the login for the connection.
            We do this here to delay the login until the data is ready.
@@ -90,7 +90,7 @@ public class BukkitConnectionListener extends AbstractLoginListener implements L
             User user = loadUser(e.getUniqueId(), e.getName());
             this.plugin.getEventFactory().handleUserLoginProcess(e.getUniqueId(), e.getName(), user);
         } catch (Exception ex) {
-            this.plugin.getLog().severe("Exception occurred whilst loading data for " + e.getUniqueId() + " - " + e.getName());
+            this.plugin.getLogger().severe("Exception occurred whilst loading data for " + e.getUniqueId() + " - " + e.getName());
             ex.printStackTrace();
 
             // deny the connection
@@ -110,7 +110,7 @@ public class BukkitConnectionListener extends AbstractLoginListener implements L
 
             // This is a problem, as they were denied at low priority, but are now being allowed.
             if (e.getLoginResult() == AsyncPlayerPreLoginEvent.Result.ALLOWED) {
-                this.plugin.getLog().severe("Player connection was re-allowed for " + e.getUniqueId());
+                this.plugin.getLogger().severe("Player connection was re-allowed for " + e.getUniqueId());
                 e.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, "");
             }
         }
@@ -124,7 +124,7 @@ public class BukkitConnectionListener extends AbstractLoginListener implements L
         final Player player = e.getPlayer();
 
         if (this.plugin.getConfiguration().get(ConfigKeys.DEBUG_LOGINS)) {
-            this.plugin.getLog().info("Processing login for " + player.getUniqueId() + " - " + player.getName());
+            this.plugin.getLogger().info("Processing login for " + player.getUniqueId() + " - " + player.getName());
         }
 
         final User user = this.plugin.getUserManager().getIfLoaded(player.getUniqueId());
@@ -133,7 +133,7 @@ public class BukkitConnectionListener extends AbstractLoginListener implements L
         if (user == null) {
             this.deniedLogin.add(e.getPlayer().getUniqueId());
 
-            this.plugin.getLog().warn("User " + player.getUniqueId() + " - " + player.getName() + " doesn't have data pre-loaded. - denying login.");
+            this.plugin.getLogger().warn("User " + player.getUniqueId() + " - " + player.getName() + " doesn't have data pre-loaded. - denying login.");
             e.disallow(PlayerLoginEvent.Result.KICK_OTHER, Message.LOADING_ERROR.asString(this.plugin.getLocaleManager()));
             return;
         }
@@ -151,7 +151,7 @@ public class BukkitConnectionListener extends AbstractLoginListener implements L
             t.printStackTrace();
         }
 
-        this.plugin.refreshAutoOp(user, player);
+        this.plugin.refreshAutoOp(player);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -160,24 +160,13 @@ public class BukkitConnectionListener extends AbstractLoginListener implements L
            If the connection was cancelled here, we need to do something to clean up the data that was loaded. */
 
         // Check to see if this connection was denied at LOW. Even if it was denied at LOW, their data will still be present.
-        boolean denied = false;
         if (this.deniedLogin.remove(e.getPlayer().getUniqueId())) {
-            denied = true;
-
             // This is a problem, as they were denied at low priority, but are now being allowed.
             if (e.getResult() == PlayerLoginEvent.Result.ALLOWED) {
-                this.plugin.getLog().severe("Player connection was re-allowed for " + e.getPlayer().getUniqueId());
+                this.plugin.getLogger().severe("Player connection was re-allowed for " + e.getPlayer().getUniqueId());
                 e.disallow(PlayerLoginEvent.Result.KICK_OTHER, "");
             }
         }
-
-        // Login event was cancelled by another plugin since we first loaded their data
-        if (denied || e.getResult() != PlayerLoginEvent.Result.ALLOWED) {
-            return;
-        }
-
-        // everything is going well. login was processed ok, this is just to refresh auto-op status.
-        this.plugin.refreshAutoOp(this.plugin.getUserManager().getIfLoaded(e.getPlayer().getUniqueId()), e.getPlayer());
     }
 
     // Wait until the last priority to unload, so plugins can still perform permission checks on this event
@@ -202,7 +191,7 @@ public class BukkitConnectionListener extends AbstractLoginListener implements L
         this.plugin.getUserManager().getHouseKeeper().registerUsage(player.getUniqueId());
 
         // force a clear of transient nodes
-        this.plugin.getScheduler().doAsync(() -> {
+        this.plugin.getBootstrap().getScheduler().executeAsync(() -> {
             User user = this.plugin.getUserManager().getIfLoaded(player.getUniqueId());
             if (user != null) {
                 user.clearTransientNodes();

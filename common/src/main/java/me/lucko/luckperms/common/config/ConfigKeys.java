@@ -28,12 +28,14 @@ package me.lucko.luckperms.common.config;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 
+import me.lucko.luckperms.api.Contexts;
+import me.lucko.luckperms.api.LookupSetting;
+import me.lucko.luckperms.api.context.ContextSet;
 import me.lucko.luckperms.api.metastacking.MetaStackDefinition;
 import me.lucko.luckperms.common.assignments.AssignmentRule;
-import me.lucko.luckperms.common.config.keys.AbstractKey;
 import me.lucko.luckperms.common.config.keys.BooleanKey;
+import me.lucko.luckperms.common.config.keys.CustomKey;
 import me.lucko.luckperms.common.config.keys.EnduringKey;
-import me.lucko.luckperms.common.config.keys.IntegerKey;
 import me.lucko.luckperms.common.config.keys.LowercaseStringKey;
 import me.lucko.luckperms.common.config.keys.MapKey;
 import me.lucko.luckperms.common.config.keys.StringKey;
@@ -54,6 +56,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -61,15 +64,18 @@ import java.util.function.Function;
 
 /**
  * All of the {@link ConfigKey}s used by LuckPerms.
+ *
+ * <p>The {@link #getAllKeys()} method and associated behaviour allows this class to behave
+ * a bit like an enum with generics.</p>
  */
-public class ConfigKeys {
+public final class ConfigKeys {
 
     /**
      * The name of the server
      */
-    public static final ConfigKey<String> SERVER = AbstractKey.of(c -> {
+    public static final ConfigKey<String> SERVER = CustomKey.of(c -> {
         if (c.getBoolean("use-server-properties-name", false)) {
-            String serverName = c.getPlugin().getServerName();
+            String serverName = c.getPlugin().getBootstrap().getServerName();
             if (serverName != null && !serverName.equals("Unknown Server")) {
                 return serverName.toLowerCase();
             }
@@ -81,27 +87,28 @@ public class ConfigKeys {
     /**
      * How many minutes to wait between syncs. A value <= 0 will disable syncing.
      */
-    public static final ConfigKey<Integer> SYNC_TIME = EnduringKey.wrap(IntegerKey.of("data.sync-minutes", -1));
+    public static final ConfigKey<Integer> SYNC_TIME = EnduringKey.wrap(CustomKey.of(c -> {
+        int val = c.getInt("sync-minutes", -1);
+        if (val == -1) {
+            val = c.getInt("data.sync-minutes", -1);
+        }
+        return val;
+    }));
 
     /**
-     * If permissions without a server context should be included.
+     * The lookup settings for contexts (care should be taken to not mutate this method)
      */
-    public static final ConfigKey<Boolean> INCLUDING_GLOBAL_PERMS = BooleanKey.of("include-global", true);
-
-    /**
-     * If permissions without a world context should be included.
-     */
-    public static final ConfigKey<Boolean> INCLUDING_GLOBAL_WORLD_PERMS = BooleanKey.of("include-global-world", true);
-
-    /**
-     * If groups without a server context should be included.
-     */
-    public static final ConfigKey<Boolean> APPLYING_GLOBAL_GROUPS = BooleanKey.of("apply-global-groups", true);
-
-    /**
-     * If groups without a world context should be included.
-     */
-    public static final ConfigKey<Boolean> APPLYING_GLOBAL_WORLD_GROUPS = BooleanKey.of("apply-global-world-groups", true);
+    public static final ConfigKey<EnumSet<LookupSetting>> LOOKUP_SETTINGS = CustomKey.of(c -> {
+        return EnumSet.copyOf(Contexts.of(
+                ContextSet.empty(),
+                c.getBoolean("include-global", true),
+                c.getBoolean("include-global-world", true),
+                true,
+                c.getBoolean("apply-global-groups", true),
+                c.getBoolean("apply-global-world-groups", true),
+                false
+        ).getSettings());
+    });
 
     /**
      * # If the servers own UUID cache/lookup facility should be used when there is no record for a player in the LuckPerms cache.
@@ -126,7 +133,7 @@ public class ConfigKeys {
     /**
      * Controls how temporary add commands should behave
      */
-    public static final ConfigKey<TemporaryModifier> TEMPORARY_ADD_BEHAVIOUR = AbstractKey.of(c -> {
+    public static final ConfigKey<TemporaryModifier> TEMPORARY_ADD_BEHAVIOUR = CustomKey.of(c -> {
         String option = c.getString("temporary-add-behaviour", "deny").toLowerCase();
         if (!option.equals("deny") && !option.equals("replace") && !option.equals("accumulate")) {
             option = "deny";
@@ -138,7 +145,7 @@ public class ConfigKeys {
     /**
      * How primary groups should be calculated.
      */
-    public static final ConfigKey<String> PRIMARY_GROUP_CALCULATION_METHOD = EnduringKey.wrap(AbstractKey.of(c -> {
+    public static final ConfigKey<String> PRIMARY_GROUP_CALCULATION_METHOD = EnduringKey.wrap(CustomKey.of(c -> {
         String option = c.getString("primary-group-calculation", "stored").toLowerCase();
         if (!option.equals("stored") && !option.equals("parents-by-weight") && !option.equals("all-parents-by-weight")) {
             option = "stored";
@@ -150,7 +157,7 @@ public class ConfigKeys {
     /**
      * A function to create primary group holder instances based upon the {@link #PRIMARY_GROUP_CALCULATION_METHOD} setting.
      */
-    public static final ConfigKey<Function<User, PrimaryGroupHolder>> PRIMARY_GROUP_CALCULATION = EnduringKey.wrap(AbstractKey.of(c -> {
+    public static final ConfigKey<Function<User, PrimaryGroupHolder>> PRIMARY_GROUP_CALCULATION = EnduringKey.wrap(CustomKey.of(c -> {
         String option = PRIMARY_GROUP_CALCULATION_METHOD.get(c);
         switch (option) {
             case "stored":
@@ -172,11 +179,6 @@ public class ConfigKeys {
      * If the plugin should check for "extra" permissions with users run LP commands
      */
     public static final ConfigKey<Boolean> USE_ARGUMENT_BASED_COMMAND_PERMISSIONS = BooleanKey.of("argument-based-command-permissions", false);
-
-    /**
-     * If the plugin should log messages to the console in color.
-     */
-    public static final ConfigKey<Boolean> USE_COLORED_LOGGER = BooleanKey.of("colored-logger", true);
 
     /**
      * If wildcards are being applied
@@ -241,7 +243,7 @@ public class ConfigKeys {
     /**
      * The algorithm LuckPerms should use when traversing the "inheritance tree"
      */
-    public static final ConfigKey<TraversalAlgorithm> INHERITANCE_TRAVERSAL_ALGORITHM = AbstractKey.of(c -> {
+    public static final ConfigKey<TraversalAlgorithm> INHERITANCE_TRAVERSAL_ALGORITHM = CustomKey.of(c -> {
         String value = c.getString("inheritance-traversal-algorithm", "depth-first-pre-order");
         switch (value.toLowerCase()) {
             case "breadth-first":
@@ -256,7 +258,7 @@ public class ConfigKeys {
     /**
      * The configured group weightings
      */
-    public static final ConfigKey<Map<String, Integer>> GROUP_WEIGHTS = AbstractKey.of(c -> {
+    public static final ConfigKey<Map<String, Integer>> GROUP_WEIGHTS = CustomKey.of(c -> {
         return c.getMap("group-weight", ImmutableMap.of()).entrySet().stream().collect(ImmutableCollectors.toMap(
                 e -> e.getKey().toLowerCase(),
                 e -> {
@@ -272,7 +274,7 @@ public class ConfigKeys {
     /**
      * Creates a new prefix MetaStack element based upon the configured values.
      */
-    public static final ConfigKey<MetaStackDefinition> PREFIX_FORMATTING_OPTIONS = AbstractKey.of(l -> {
+    public static final ConfigKey<MetaStackDefinition> PREFIX_FORMATTING_OPTIONS = CustomKey.of(l -> {
         List<String> format = l.getList("meta-formatting.prefix.format", new ArrayList<>());
         if (format.isEmpty()) {
             format.add("highest");
@@ -287,7 +289,7 @@ public class ConfigKeys {
     /**
      * Creates a new suffix MetaStack element based upon the configured values.
      */
-    public static final ConfigKey<MetaStackDefinition> SUFFIX_FORMATTING_OPTIONS = AbstractKey.of(l -> {
+    public static final ConfigKey<MetaStackDefinition> SUFFIX_FORMATTING_OPTIONS = CustomKey.of(l -> {
         List<String> format = l.getList("meta-formatting.suffix.format", new ArrayList<>());
         if (format.isEmpty()) {
             format.add("highest");
@@ -312,7 +314,7 @@ public class ConfigKeys {
     /**
      * If server operators should be enabled. Only used by the Bukkit platform.
      */
-    public static final ConfigKey<Boolean> OPS_ENABLED = EnduringKey.wrap(AbstractKey.of(c -> !AUTO_OP.get(c) && c.getBoolean("enable-ops", true)));
+    public static final ConfigKey<Boolean> OPS_ENABLED = EnduringKey.wrap(CustomKey.of(c -> !AUTO_OP.get(c) && c.getBoolean("enable-ops", true)));
 
     /**
      * If server operators should be able to use LuckPerms commands by default. Only used by the Bukkit platform.
@@ -327,7 +329,7 @@ public class ConfigKeys {
     /**
      * The name of the server to use for Vault.
      */
-    public static final ConfigKey<String> VAULT_SERVER = AbstractKey.of(c -> {
+    public static final ConfigKey<String> VAULT_SERVER = CustomKey.of(c -> {
         // default to true for backwards compatibility
         if (USE_VAULT_SERVER.get(c)) {
             return c.getString("vault-server", "global").toLowerCase();
@@ -354,7 +356,13 @@ public class ConfigKeys {
     /**
      * The world rewrites map
      */
-    public static final ConfigKey<Map<String, String>> WORLD_REWRITES = MapKey.of("world-rewrite");
+    public static final ConfigKey<Map<String, String>> WORLD_REWRITES = CustomKey.of(c -> {
+        return c.getMap("world-rewrite", ImmutableMap.of()).entrySet().stream()
+                .collect(ImmutableCollectors.toMap(
+                        e -> e.getKey().toLowerCase(),
+                        e -> e.getValue().toLowerCase()
+                ));
+    });
 
     /**
      * The group name rewrites map
@@ -364,7 +372,7 @@ public class ConfigKeys {
     /**
      * The default assignments being applied by the plugin
      */
-    public static final ConfigKey<List<AssignmentRule>> DEFAULT_ASSIGNMENTS = AbstractKey.of(c -> {
+    public static final ConfigKey<List<AssignmentRule>> DEFAULT_ASSIGNMENTS = CustomKey.of(c -> {
         return c.getObjectList("default-assignments", ImmutableList.of()).stream().map(name -> {
             String hasTrue = c.getString("default-assignments." + name + ".if.has-true", null);
             String hasFalse = c.getString("default-assignments." + name + ".if.has-false", null);
@@ -379,7 +387,7 @@ public class ConfigKeys {
     /**
      * The database settings, username, password, etc for use by any database
      */
-    public static final ConfigKey<StorageCredentials> DATABASE_VALUES = EnduringKey.wrap(AbstractKey.of(c -> {
+    public static final ConfigKey<StorageCredentials> DATABASE_VALUES = EnduringKey.wrap(CustomKey.of(c -> {
         int maxPoolSize = c.getInt("data.pool-settings.maximum-pool-size", c.getInt("data.pool-size", 10));
         int minIdle = c.getInt("data.pool-settings.minimum-idle", maxPoolSize);
         int maxLifetime = c.getInt("data.pool-settings.maximum-lifetime", 1800000);
@@ -428,7 +436,7 @@ public class ConfigKeys {
     /**
      * The options for split storage
      */
-    public static final ConfigKey<Map<SplitStorageType, String>> SPLIT_STORAGE_OPTIONS = EnduringKey.wrap(AbstractKey.of(c -> {
+    public static final ConfigKey<Map<SplitStorageType, String>> SPLIT_STORAGE_OPTIONS = EnduringKey.wrap(CustomKey.of(c -> {
         EnumMap<SplitStorageType, String> map = new EnumMap<>(SplitStorageType.class);
         map.put(SplitStorageType.USER, c.getString("split-storage.methods.user", "h2").toLowerCase());
         map.put(SplitStorageType.GROUP, c.getString("split-storage.methods.group", "h2").toLowerCase());
@@ -501,15 +509,25 @@ public class ConfigKeys {
 
             try {
                 Field[] values = ConfigKeys.class.getFields();
+                int counter = 0;
+
                 for (Field f : values) {
+                    // ignore non-static fields
                     if (!Modifier.isStatic(f.getModifiers())) {
                         continue;
                     }
 
-                    Object val = f.get(null);
-                    if (val instanceof ConfigKey<?>) {
-                        keys.put(f.getName(), (ConfigKey<?>) val);
+                    // ignore fields that aren't configkeys
+                    if (!ConfigKey.class.equals(f.getType())) {
+                        continue;
                     }
+
+                    // get the key instance
+                    BaseConfigKey<?> key = (BaseConfigKey<?>) f.get(null);
+                    // set the ordinal value of the key.
+                    key.ordinal = counter++;
+                    // add the key to the return map
+                    keys.put(f.getName(), key);
                 }
             } catch (Exception e) {
                 e.printStackTrace();

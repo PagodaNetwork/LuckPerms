@@ -27,8 +27,10 @@ package me.lucko.luckperms.common.storage.dao;
 
 import me.lucko.luckperms.api.HeldPermission;
 import me.lucko.luckperms.api.LogEntry;
+import me.lucko.luckperms.api.PlayerSaveResult;
 import me.lucko.luckperms.common.actionlog.Log;
 import me.lucko.luckperms.common.bulkupdate.BulkUpdate;
+import me.lucko.luckperms.common.bulkupdate.comparisons.Constraint;
 import me.lucko.luckperms.common.model.Group;
 import me.lucko.luckperms.common.model.Track;
 import me.lucko.luckperms.common.model.User;
@@ -61,7 +63,7 @@ public abstract class AbstractDao {
         return this.name;
     }
 
-    public abstract void init();
+    public abstract void init() throws Exception;
 
     public abstract void shutdown();
 
@@ -81,7 +83,7 @@ public abstract class AbstractDao {
 
     public abstract Set<UUID> getUniqueUsers() throws Exception;
 
-    public abstract List<HeldPermission<UUID>> getUsersWithPermission(String permission) throws Exception;
+    public abstract List<HeldPermission<UUID>> getUsersWithPermission(Constraint constraint) throws Exception;
 
     public abstract Group createAndLoadGroup(String name) throws Exception;
 
@@ -93,7 +95,7 @@ public abstract class AbstractDao {
 
     public abstract void deleteGroup(Group group) throws Exception;
 
-    public abstract List<HeldPermission<String>> getGroupsWithPermission(String permission) throws Exception;
+    public abstract List<HeldPermission<String>> getGroupsWithPermission(Constraint constraint) throws Exception;
 
     public abstract Track createAndLoadTrack(String name) throws Exception;
 
@@ -105,12 +107,12 @@ public abstract class AbstractDao {
 
     public abstract void deleteTrack(Track track) throws Exception;
 
-    public abstract void saveUUIDData(UUID uuid, String username) throws Exception;
+    public abstract PlayerSaveResult savePlayerData(UUID uuid, String username) throws Exception;
 
     @Nullable
-    public abstract UUID getUUID(String username) throws Exception;
+    public abstract UUID getPlayerUuid(String username) throws Exception;
 
     @Nullable
-    public abstract String getName(UUID uuid) throws Exception;
+    public abstract String getPlayerName(UUID uuid) throws Exception;
 
 }

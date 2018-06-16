@@ -30,17 +30,18 @@ import com.google.common.collect.ImmutableList;
 
 import me.lucko.luckperms.api.HeldPermission;
 import me.lucko.luckperms.api.LogEntry;
+import me.lucko.luckperms.api.PlayerSaveResult;
 import me.lucko.luckperms.api.event.cause.CreationCause;
 import me.lucko.luckperms.api.event.cause.DeletionCause;
 import me.lucko.luckperms.common.actionlog.Log;
 import me.lucko.luckperms.common.api.delegates.model.ApiStorage;
 import me.lucko.luckperms.common.bulkupdate.BulkUpdate;
+import me.lucko.luckperms.common.bulkupdate.comparisons.Constraint;
 import me.lucko.luckperms.common.model.Group;
 import me.lucko.luckperms.common.model.Track;
 import me.lucko.luckperms.common.model.User;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
 import me.lucko.luckperms.common.storage.dao.AbstractDao;
-import me.lucko.luckperms.common.storage.wrappings.BufferedOutputStorage;
 import me.lucko.luckperms.common.storage.wrappings.PhasedStorage;
 
 import java.util.List;
@@ -57,11 +58,10 @@ import java.util.concurrent.CompletionException;
  */
 public class AbstractStorage implements Storage {
     public static Storage create(LuckPermsPlugin plugin, AbstractDao backing) {
+        // make a base implementation
         Storage base = new AbstractStorage(plugin, backing);
-        Storage phased = PhasedStorage.wrap(base);
-        BufferedOutputStorage buffered = BufferedOutputStorage.wrap(phased, 250L);
-        plugin.getScheduler().asyncRepeating(buffered, 2L);
-        return buffered;
+        // wrap with a phaser
+        return PhasedStorage.wrap(base);
     }
 
     private final LuckPermsPlugin plugin;
@@ -80,6 +80,11 @@ public class AbstractStorage implements Storage {
         return this.dao;
     }
 
+    @Override
+    public ApiStorage getApiDelegate() {
+        return this.apiDelegate;
+    }
+
     private <T> CompletableFuture<T> makeFuture(Callable<T> supplier) {
         return CompletableFuture.supplyAsync(() -> {
             try {
@@ -88,7 +93,7 @@ public class AbstractStorage implements Storage {
                 Throwables.propagateIfPossible(e);
                 throw new CompletionException(e);
             }
-        }, this.dao.getPlugin().getScheduler().async());
+        }, this.dao.getPlugin().getBootstrap().getScheduler().async());
     }
 
     private CompletableFuture<Void> makeFuture(ThrowingRunnable runnable) {
@@ -99,12 +104,7 @@ public class AbstractStorage implements Storage {
                 Throwables.propagateIfPossible(e);
                 throw new CompletionException(e);
             }
-        }, this.dao.getPlugin().getScheduler().async());
-    }
-
-    @Override
-    public ApiStorage getApiDelegate() {
-        return this.apiDelegate;
+        }, this.dao.getPlugin().getBootstrap().getScheduler().async());
     }
 
     private interface ThrowingRunnable {
@@ -117,16 +117,11 @@ public class AbstractStorage implements Storage {
     }
 
     @Override
-    public Storage noBuffer() {
-        return this;
-    }
-
-    @Override
     public void init() {
         try {
             this.dao.init();
         } catch (Exception e) {
-            this.plugin.getLog().severe("Failed to init storage dao");
+            this.plugin.getLogger().severe("Failed to init storage dao");
             e.printStackTrace();
         }
     }
@@ -136,7 +131,7 @@ public class AbstractStorage implements Storage {
         try {
             this.dao.shutdown();
         } catch (Exception e) {
-            this.plugin.getLog().severe("Failed to shutdown storage dao");
+            this.plugin.getLogger().severe("Failed to shutdown storage dao");
             e.printStackTrace();
         }
     }
@@ -183,9 +178,9 @@ public class AbstractStorage implements Storage {
     }
 
     @Override
-    public CompletableFuture<List<HeldPermission<UUID>>> getUsersWithPermission(String permission) {
+    public CompletableFuture<List<HeldPermission<UUID>>> getUsersWithPermission(Constraint constraint) {
         return makeFuture(() -> {
-            List<HeldPermission<UUID>> result = this.dao.getUsersWithPermission(permission);
+            List<HeldPermission<UUID>> result = this.dao.getUsersWithPermission(constraint);
             result.removeIf(entry -> entry.asNode().hasExpired());
             return ImmutableList.copyOf(result);
         });
@@ -235,9 +230,9 @@ public class AbstractStorage implements Storage {
     }
 
     @Override
-    public CompletableFuture<List<HeldPermission<String>>> getGroupsWithPermission(String permission) {
+    public CompletableFuture<List<HeldPermission<String>>> getGroupsWithPermission(Constraint constraint) {
         return makeFuture(() -> {
-            List<HeldPermission<String>> result = this.dao.getGroupsWithPermission(permission);
+            List<HeldPermission<String>> result = this.dao.getGroupsWithPermission(constraint);
             result.removeIf(entry -> entry.asNode().hasExpired());
             return ImmutableList.copyOf(result);
         });
@@ -287,17 +282,23 @@ public class AbstractStorage implements Storage {
     }
 
     @Override
-    public CompletableFuture<Void> saveUUIDData(UUID uuid, String username) {
-        return makeFuture(() -> this.dao.saveUUIDData(uuid, username));
+    public CompletableFuture<PlayerSaveResult> savePlayerData(UUID uuid, String username) {
+        return makeFuture(() -> {
+            PlayerSaveResult result = this.dao.savePlayerData(uuid, username);
+            if (result != null) {
+                this.plugin.getEventFactory().handlePlayerDataSave(uuid, username, result);
+            }
+            return result;
+        });
     }
 
     @Override
-    public CompletableFuture<UUID> getUUID(String username) {
-        return makeFuture(() -> this.dao.getUUID(username));
+    public CompletableFuture<UUID> getPlayerUuid(String username) {
+        return makeFuture(() -> this.dao.getPlayerUuid(username));
     }
 
     @Override
-    public CompletableFuture<String> getName(UUID uuid) {
-        return makeFuture(() -> this.dao.getName(uuid));
+    public CompletableFuture<String> getPlayerName(UUID uuid) {
+        return makeFuture(() -> this.dao.getPlayerName(uuid));
     }
 }

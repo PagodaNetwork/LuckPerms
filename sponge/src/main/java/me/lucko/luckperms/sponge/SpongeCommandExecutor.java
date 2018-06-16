@@ -27,8 +27,8 @@ package me.lucko.luckperms.sponge;
 
 import com.google.common.base.Splitter;
 
-import me.lucko.luckperms.common.commands.CommandManager;
-import me.lucko.luckperms.common.commands.sender.Sender;
+import me.lucko.luckperms.common.command.CommandManager;
+import me.lucko.luckperms.common.sender.Sender;
 
 import org.spongepowered.api.command.CommandCallable;
 import org.spongepowered.api.command.CommandResult;
@@ -52,7 +52,7 @@ public class SpongeCommandExecutor extends CommandManager implements CommandCall
 
     private final LPSpongePlugin plugin;
 
-    SpongeCommandExecutor(LPSpongePlugin plugin) {
+    public SpongeCommandExecutor(LPSpongePlugin plugin) {
         super(plugin);
         this.plugin = plugin;
     }

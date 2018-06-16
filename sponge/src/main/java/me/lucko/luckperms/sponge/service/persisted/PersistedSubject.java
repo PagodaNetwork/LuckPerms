@@ -25,117 +25,132 @@
 
 package me.lucko.luckperms.sponge.service.persisted;
 
-import com.github.benmanes.caffeine.cache.Caffeine;
-import com.github.benmanes.caffeine.cache.LoadingCache;
-import com.google.common.collect.ImmutableList;
-
-import me.lucko.luckperms.api.Tristate;
-import me.lucko.luckperms.api.context.ImmutableContextSet;
 import me.lucko.luckperms.common.buffers.BufferedRequest;
-import me.lucko.luckperms.common.verbose.CheckOrigin;
+import me.lucko.luckperms.common.model.NodeMapType;
+import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
 import me.lucko.luckperms.sponge.service.LuckPermsService;
-import me.lucko.luckperms.sponge.service.ProxyFactory;
+import me.lucko.luckperms.sponge.service.calculated.CalculatedSubject;
 import me.lucko.luckperms.sponge.service.calculated.CalculatedSubjectData;
+import me.lucko.luckperms.sponge.service.calculated.MonitoredSubjectData;
 import me.lucko.luckperms.sponge.service.model.LPSubject;
-import me.lucko.luckperms.sponge.service.reference.LPSubjectReference;
-import me.lucko.luckperms.sponge.service.storage.SubjectStorageModel;
+import me.lucko.luckperms.sponge.service.model.LPSubjectData;
+import me.lucko.luckperms.sponge.service.proxy.ProxyFactory;
 
 import org.spongepowered.api.command.CommandSource;
 import org.spongepowered.api.service.permission.Subject;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 /**
  * A simple persistable Subject implementation
  */
-public class PersistedSubject implements LPSubject {
+public class PersistedSubject extends CalculatedSubject implements LPSubject {
+    private final LuckPermsService service;
+
+    /**
+     * The subjects identifier
+     */
     private final String identifier;
 
-    private final LuckPermsService service;
+    /**
+     * The parent collection
+     */
     private final PersistedCollection parentCollection;
 
+    // subject data instances
     private final PersistedSubjectData subjectData;
     private final CalculatedSubjectData transientSubjectData;
 
-    private final LoadingCache<PermissionLookupKey, Tristate> permissionLookupCache = Caffeine.newBuilder()
-            .expireAfterAccess(20, TimeUnit.MINUTES)
-            .build(lookup -> lookupPermissionValue(lookup.getContexts(), lookup.getNode()));
+    private Subject spongeSubject = null;
 
-    private final LoadingCache<ImmutableContextSet, ImmutableList<LPSubjectReference>> parentLookupCache = Caffeine.newBuilder()
-            .expireAfterAccess(20, TimeUnit.MINUTES)
-            .build(this::lookupParents);
+    /**
+     * The save buffer instance for saving changes to disk
+     */
+    private final SaveBuffer saveBuffer;
 
-    private final LoadingCache<OptionLookupKey, Optional<String>> optionLookupCache = Caffeine.newBuilder()
-            .expireAfterAccess(20, TimeUnit.MINUTES)
-            .build(lookup -> lookupOptionValue(lookup.getContexts(), lookup.getKey()));
+    /**
+     * If a save is pending for this subject
+     */
+    private boolean pendingSave = false;
 
-    private final BufferedRequest<Void> saveBuffer = new BufferedRequest<Void>(1000L, 500L, r -> PersistedSubject.this.service.getPlugin().getScheduler().doAsync(r)) {
-        @Override
-        protected Void perform() {
-            try {
-                PersistedSubject.this.service.getStorage().saveToFile(PersistedSubject.this);
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-            return null;
-        }
-    };
-
-    public PersistedSubject(String identifier, LuckPermsService service, PersistedCollection parentCollection) {
-        this.identifier = identifier;
+    public PersistedSubject(LuckPermsService service, PersistedCollection parentCollection, String identifier) {
+        super(service.getPlugin());
         this.service = service;
         this.parentCollection = parentCollection;
+        this.identifier = identifier;
 
-        this.subjectData = new PersistedSubjectData(service, parentCollection.getIdentifier() + "/" + identifier + "/p", this);
-        this.transientSubjectData = new CalculatedSubjectData(this, service, parentCollection.getIdentifier() + "/" + identifier + "/t");
+        this.subjectData = new PersistedSubjectData(this, NodeMapType.ENDURING, service) {
+            @Override
+            protected void onUpdate(boolean success) {
+                super.onUpdate(success);
+                if (success) {
+                    fireUpdateEvent(this);
+                }
+            }
+        };
+        this.transientSubjectData = new MonitoredSubjectData(this, NodeMapType.TRANSIENT, service) {
+            @Override
+            protected void onUpdate(boolean success) {
+                if (success) {
+                    fireUpdateEvent(this);
+                }
+            }
+        };
+
+        this.saveBuffer = new SaveBuffer(service.getPlugin());
     }
 
-    @Override
-    public void invalidateCaches(CacheLevel type) {
-        this.optionLookupCache.invalidateAll();
+    /**
+     * Calls the subject data update event for the given {@link LPSubjectData} instance.
+     *
+     * @param subjectData the subject data
+     */
+    private void fireUpdateEvent(LPSubjectData subjectData) {
+        this.service.getPlugin().getUpdateEventHandler().fireUpdateEvent(subjectData);
+    }
 
-        if (type == CacheLevel.OPTION) {
+    /**
+     * Loads data into this {@link PersistedSubject} from the given
+     * {@link SubjectDataContainer} container
+     *
+     * @param container the container to load from
+     */
+    public void loadData(SubjectDataContainer container) {
+        if (this.pendingSave) {
             return;
         }
 
-        this.permissionLookupCache.invalidateAll();
-        this.subjectData.invalidateLookupCache();
-        this.transientSubjectData.invalidateLookupCache();
-
-        if (type == CacheLevel.PERMISSION) {
-            return;
-        }
-
-        this.parentLookupCache.invalidateAll();
-    }
-
-    @Override
-    public void performCleanup() {
-        this.subjectData.cleanup();
-        this.transientSubjectData.cleanup();
-        this.permissionLookupCache.cleanUp();
-        this.parentLookupCache.cleanUp();
-        this.optionLookupCache.cleanUp();
-    }
-
-    public void loadData(SubjectStorageModel dataHolder) {
         this.subjectData.setSave(false);
-        dataHolder.applyToData(this.subjectData);
+        container.applyToData(this.subjectData);
         this.subjectData.setSave(true);
     }
 
+    /**
+     * Requests that this subjects data is saved to disk
+     */
     public void save() {
+        this.pendingSave = true;
         this.saveBuffer.request();
+    }
+
+    void doSave() {
+        try {
+            this.service.getStorage().saveToFile(PersistedSubject.this);
+        } catch (IOException e) {
+            e.printStackTrace();
+        } finally {
+            this.pendingSave = false;
+        }
     }
 
     @Override
     public Subject sponge() {
-        return ProxyFactory.toSponge(this);
+        if (this.spongeSubject == null) {
+            this.spongeSubject = ProxyFactory.toSponge(this);
+        }
+        return this.spongeSubject;
     }
 
     @Override
@@ -168,144 +183,15 @@ public class PersistedSubject implements LPSubject {
         return Optional.empty();
     }
 
-    private Tristate lookupPermissionValue(ImmutableContextSet contexts, String node) {
-        Tristate res;
-
-        // if transient has priority
-        if (!this.parentCollection.getIdentifier().equals("defaults")) {
-            res = this.transientSubjectData.getPermissionValue(contexts, node);
-            if (res != Tristate.UNDEFINED) {
-                return res;
-            }
-
-            res = this.subjectData.getPermissionValue(contexts, node);
-            if (res != Tristate.UNDEFINED) {
-                return res;
-            }
-        } else {
-            res = this.subjectData.getPermissionValue(contexts, node);
-            if (res != Tristate.UNDEFINED) {
-                return res;
-            }
-
-            res = this.transientSubjectData.getPermissionValue(contexts, node);
-            if (res != Tristate.UNDEFINED) {
-                return res;
-            }
+    private final class SaveBuffer extends BufferedRequest<Void> {
+        public SaveBuffer(LuckPermsPlugin plugin) {
+            super(1, TimeUnit.SECONDS, plugin.getBootstrap().getScheduler());
         }
 
-        for (LPSubjectReference parent : getParents(contexts)) {
-            res = parent.resolveLp().join().getPermissionValue(contexts, node);
-            if (res != Tristate.UNDEFINED) {
-                return res;
-            }
+        @Override
+        protected Void perform() {
+            doSave();
+            return null;
         }
-
-        if (getParentCollection().getIdentifier().equalsIgnoreCase("defaults")) {
-            return Tristate.UNDEFINED;
-        }
-
-        res = getParentCollection().getDefaults().getPermissionValue(contexts, node);
-        if (res != Tristate.UNDEFINED) {
-            return res;
-        }
-
-        res = this.service.getDefaults().getPermissionValue(contexts, node);
-        return res;
-    }
-
-    private ImmutableList<LPSubjectReference> lookupParents(ImmutableContextSet contexts) {
-        List<LPSubjectReference> s = new ArrayList<>();
-        s.addAll(this.subjectData.getParents(contexts));
-        s.addAll(this.transientSubjectData.getParents(contexts));
-
-        if (!getParentCollection().getIdentifier().equalsIgnoreCase("defaults")) {
-            s.addAll(getParentCollection().getDefaults().getParents(contexts));
-            s.addAll(this.service.getDefaults().getParents(contexts));
-        }
-
-        return this.service.sortSubjects(s);
-    }
-
-    private Optional<String> lookupOptionValue(ImmutableContextSet contexts, String key) {
-        Optional<String> res;
-
-        // if transient has priority
-        if (!this.parentCollection.getIdentifier().equals("defaults")) {
-            res = Optional.ofNullable(this.transientSubjectData.getOptions(contexts).get(key));
-            if (res.isPresent()) {
-                return res;
-            }
-
-            res = Optional.ofNullable(this.subjectData.getOptions(contexts).get(key));
-            if (res.isPresent()) {
-                return res;
-            }
-        } else {
-            res = Optional.ofNullable(this.subjectData.getOptions(contexts).get(key));
-            if (res.isPresent()) {
-                return res;
-            }
-
-            res = Optional.ofNullable(this.transientSubjectData.getOptions(contexts).get(key));
-            if (res.isPresent()) {
-                return res;
-            }
-        }
-
-        for (LPSubjectReference parent : getParents(contexts)) {
-            res = parent.resolveLp().join().getOption(contexts, key);
-            if (res.isPresent()) {
-                return res;
-            }
-        }
-
-        if (getParentCollection().getIdentifier().equalsIgnoreCase("defaults")) {
-            return Optional.empty();
-        }
-
-        res = getParentCollection().getDefaults().getOption(contexts, key);
-        if (res.isPresent()) {
-            return res;
-        }
-
-        return this.service.getDefaults().getOption(contexts, key);
-    }
-
-    @Override
-    public Tristate getPermissionValue(ImmutableContextSet contexts, String node) {
-        Objects.requireNonNull(contexts, "contexts");
-        Objects.requireNonNull(node, "node");
-
-        Tristate t = this.permissionLookupCache.get(PermissionLookupKey.of(node, contexts));
-        this.service.getPlugin().getVerboseHandler().offerCheckData(CheckOrigin.INTERNAL, getParentCollection().getIdentifier() + "/" + this.identifier, contexts, node, t);
-        return t;
-    }
-
-    @Override
-    public boolean isChildOf(ImmutableContextSet contexts, LPSubjectReference subject) {
-        Objects.requireNonNull(contexts, "contexts");
-        Objects.requireNonNull(subject, "subject");
-
-        if (getParentCollection().getIdentifier().equalsIgnoreCase("defaults")) {
-            return this.subjectData.getParents(contexts).contains(subject) ||
-                    this.transientSubjectData.getParents(contexts).contains(subject);
-        } else {
-            return this.subjectData.getParents(contexts).contains(subject) ||
-                    this.transientSubjectData.getParents(contexts).contains(subject) ||
-                    getParentCollection().getDefaults().getParents(contexts).contains(subject) ||
-                    this.service.getDefaults().getParents(contexts).contains(subject);
-        }
-    }
-
-    @Override
-    public ImmutableList<LPSubjectReference> getParents(ImmutableContextSet contexts) {
-        Objects.requireNonNull(contexts, "contexts");
-        return this.parentLookupCache.get(contexts);
-    }
-
-    @Override
-    public Optional<String> getOption(ImmutableContextSet contexts, String key) {
-        return this.optionLookupCache.get(OptionLookupKey.of(key, contexts));
     }
 }

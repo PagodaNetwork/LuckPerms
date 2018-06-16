@@ -32,20 +32,25 @@ import com.google.gson.reflect.TypeToken;
 import me.lucko.luckperms.api.HeldPermission;
 import me.lucko.luckperms.api.LogEntry;
 import me.lucko.luckperms.api.Node;
+import me.lucko.luckperms.api.PlayerSaveResult;
 import me.lucko.luckperms.common.actionlog.ExtendedLogEntry;
 import me.lucko.luckperms.common.actionlog.Log;
 import me.lucko.luckperms.common.bulkupdate.BulkUpdate;
+import me.lucko.luckperms.common.bulkupdate.PreparedStatementBuilder;
+import me.lucko.luckperms.common.bulkupdate.comparisons.Constraint;
 import me.lucko.luckperms.common.contexts.ContextSetJsonSerializer;
 import me.lucko.luckperms.common.managers.group.GroupManager;
 import me.lucko.luckperms.common.managers.track.TrackManager;
 import me.lucko.luckperms.common.model.Group;
+import me.lucko.luckperms.common.model.NodeMapType;
 import me.lucko.luckperms.common.model.Track;
 import me.lucko.luckperms.common.model.User;
-import me.lucko.luckperms.common.node.NodeFactory;
-import me.lucko.luckperms.common.node.NodeHeldPermission;
-import me.lucko.luckperms.common.node.NodeModel;
+import me.lucko.luckperms.common.model.UserIdentifier;
+import me.lucko.luckperms.common.node.factory.NodeFactory;
+import me.lucko.luckperms.common.node.model.NodeDataContainer;
+import me.lucko.luckperms.common.node.model.NodeHeldPermission;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
-import me.lucko.luckperms.common.references.UserIdentifier;
+import me.lucko.luckperms.common.storage.PlayerSaveResultImpl;
 import me.lucko.luckperms.common.storage.dao.AbstractDao;
 import me.lucko.luckperms.common.storage.dao.sql.connection.AbstractConnectionFactory;
 import me.lucko.luckperms.common.storage.dao.sql.connection.file.SQLiteConnectionFactory;
@@ -68,8 +73,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -81,22 +84,23 @@ public class SqlDao extends AbstractDao {
     private static final String USER_PERMISSIONS_DELETE = "DELETE FROM {prefix}user_permissions WHERE uuid=?";
     private static final String USER_PERMISSIONS_INSERT = "INSERT INTO {prefix}user_permissions(uuid, permission, value, server, world, expiry, contexts) VALUES(?, ?, ?, ?, ?, ?, ?)";
     private static final String USER_PERMISSIONS_SELECT_DISTINCT = "SELECT DISTINCT uuid FROM {prefix}user_permissions";
-    private static final String USER_PERMISSIONS_SELECT_PERMISSION = "SELECT uuid, value, server, world, expiry, contexts FROM {prefix}user_permissions WHERE permission=?";
+    private static final String USER_PERMISSIONS_SELECT_PERMISSION = "SELECT uuid, permission, value, server, world, expiry, contexts FROM {prefix}user_permissions WHERE ";
 
-    private static final String PLAYER_SELECT = "SELECT username, primary_group FROM {prefix}players WHERE uuid=?";
-    private static final String PLAYER_SELECT_UUID = "SELECT uuid FROM {prefix}players WHERE username=? LIMIT 1";
-    private static final String PLAYER_SELECT_USERNAME = "SELECT username FROM {prefix}players WHERE uuid=? LIMIT 1";
-    private static final String PLAYER_SELECT_PRIMARY_GROUP = "SELECT primary_group FROM {prefix}players WHERE uuid=? LIMIT 1";
-    private static final String PLAYER_INSERT = "INSERT INTO {prefix}players VALUES(?, ?, ?)";
-    private static final String PLAYER_UPDATE = "UPDATE {prefix}players SET username=? WHERE uuid=?";
-    private static final String PLAYER_DELETE = "DELETE FROM {prefix}players WHERE username=? AND NOT uuid=?";
-    private static final String PLAYER_UPDATE_PRIMARY_GROUP = "UPDATE {prefix}players SET primary_group=? WHERE uuid=?";
+    private static final String PLAYER_SELECT_UUID_BY_USERNAME = "SELECT uuid FROM {prefix}players WHERE username=? LIMIT 1";
+    private static final String PLAYER_SELECT_USERNAME_BY_UUID = "SELECT username FROM {prefix}players WHERE uuid=? LIMIT 1";
+    private static final String PLAYER_UPDATE_USERNAME_FOR_UUID = "UPDATE {prefix}players SET username=? WHERE uuid=?";
+    private static final String PLAYER_INSERT = "INSERT INTO {prefix}players (uuid, username, primary_group) VALUES(?, ?, ?)";
+    private static final String PLAYER_SELECT_ALL_UUIDS_BY_USERNAME = "SELECT uuid FROM {prefix}players WHERE username=? AND NOT uuid=?";
+    private static final String PLAYER_DELETE_ALL_UUIDS_BY_USERNAME = "DELETE FROM {prefix}players WHERE username=? AND NOT uuid=?";
+    private static final String PLAYER_SELECT_BY_UUID = "SELECT username, primary_group FROM {prefix}players WHERE uuid=?";
+    private static final String PLAYER_SELECT_PRIMARY_GROUP_BY_UUID = "SELECT primary_group FROM {prefix}players WHERE uuid=? LIMIT 1";
+    private static final String PLAYER_UPDATE_PRIMARY_GROUP_BY_UUID = "UPDATE {prefix}players SET primary_group=? WHERE uuid=?";
 
     private static final String GROUP_PERMISSIONS_SELECT = "SELECT permission, value, server, world, expiry, contexts FROM {prefix}group_permissions WHERE name=?";
     private static final String GROUP_PERMISSIONS_DELETE = "DELETE FROM {prefix}group_permissions WHERE name=?";
     private static final String GROUP_PERMISSIONS_DELETE_SPECIFIC = "DELETE FROM {prefix}group_permissions WHERE name=? AND permission=? AND value=? AND server=? AND world=? AND expiry=? AND contexts=?";
     private static final String GROUP_PERMISSIONS_INSERT = "INSERT INTO {prefix}group_permissions(name, permission, value, server, world, expiry, contexts) VALUES(?, ?, ?, ?, ?, ?, ?)";
-    private static final String GROUP_PERMISSIONS_SELECT_PERMISSION = "SELECT name, value, server, world, expiry, contexts FROM {prefix}group_permissions WHERE permission=?";
+    private static final String GROUP_PERMISSIONS_SELECT_PERMISSION = "SELECT name, permission, value, server, world, expiry, contexts FROM {prefix}group_permissions WHERE ";
 
     private static final String GROUP_SELECT_ALL = "SELECT name FROM {prefix}groups";
     private static final String MYSQL_GROUP_INSERT = "INSERT INTO {prefix}groups (name) VALUES(?) ON DUPLICATE KEY UPDATE name=name";
@@ -105,7 +109,7 @@ public class SqlDao extends AbstractDao {
     private static final String POSTGRESQL_GROUP_INSERT = "INSERT INTO {prefix}groups (name) VALUES(?) ON CONFLICT (name) DO NOTHING";
     private static final String GROUP_DELETE = "DELETE FROM {prefix}groups WHERE name=?";
 
-    private static final String TRACK_INSERT = "INSERT INTO {prefix}tracks VALUES(?, ?)";
+    private static final String TRACK_INSERT = "INSERT INTO {prefix}tracks (name, groups) VALUES(?, ?)";
     private static final String TRACK_SELECT = "SELECT groups FROM {prefix}tracks WHERE name=?";
     private static final String TRACK_SELECT_ALL = "SELECT * FROM {prefix}tracks";
     private static final String TRACK_UPDATE = "UPDATE {prefix}tracks SET groups=? WHERE name=?";
@@ -129,6 +133,10 @@ public class SqlDao extends AbstractDao {
         return this.gson;
     }
 
+    public AbstractConnectionFactory getProvider() {
+        return this.provider;
+    }
+
     public Function<String, String> getPrefix() {
         return this.prefix;
     }
@@ -147,63 +155,56 @@ public class SqlDao extends AbstractDao {
     }
 
     @Override
-    public void init() {
-        try {
-            this.provider.init();
+    public void init() throws Exception {
+        this.provider.init();
 
-            // Init tables
-            if (!tableExists(this.prefix.apply("{prefix}user_permissions"))) {
-                String schemaFileName = "schema/" + this.provider.getName().toLowerCase() + ".sql";
-                try (InputStream is = this.plugin.getResourceStream(schemaFileName)) {
-                    if (is == null) {
-                        throw new Exception("Couldn't locate schema file for " + this.provider.getName());
-                    }
-
-                    try (BufferedReader reader = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
-                        try (Connection connection = this.provider.getConnection()) {
-                            try (Statement s = connection.createStatement()) {
-                                StringBuilder sb = new StringBuilder();
-                                String line;
-                                while ((line = reader.readLine()) != null) {
-                                    if (line.startsWith("--") || line.startsWith("#")) continue;
-
-                                    sb.append(line);
-
-                                    // check for end of declaration
-                                    if (line.endsWith(";")) {
-                                        sb.deleteCharAt(sb.length() - 1);
-
-                                        String result = this.prefix.apply(sb.toString().trim());
-                                        if (!result.isEmpty()) s.addBatch(result);
-
-                                        // reset
-                                        sb = new StringBuilder();
-                                    }
-                                }
-                                s.executeBatch();
-                            }
-                        }
-                    }
+        // Init tables
+        if (!tableExists(this.prefix.apply("{prefix}user_permissions"))) {
+            String schemaFileName = "me/lucko/luckperms/schema/" + this.provider.getName().toLowerCase() + ".sql";
+            try (InputStream is = this.plugin.getBootstrap().getResourceStream(schemaFileName)) {
+                if (is == null) {
+                    throw new Exception("Couldn't locate schema file for " + this.provider.getName());
                 }
-            }
 
-            // migrations
-            try {
-                if (!(this.provider instanceof SQLiteConnectionFactory) && !(this.provider instanceof PostgreConnectionFactory)) {
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
                     try (Connection connection = this.provider.getConnection()) {
                         try (Statement s = connection.createStatement()) {
-                            s.execute(this.prefix.apply("ALTER TABLE {prefix}actions MODIFY COLUMN actor_name VARCHAR(100)"));
-                            s.execute(this.prefix.apply("ALTER TABLE {prefix}actions MODIFY COLUMN action VARCHAR(300)"));
+                            StringBuilder sb = new StringBuilder();
+                            String line;
+                            while ((line = reader.readLine()) != null) {
+                                if (line.startsWith("--") || line.startsWith("#")) continue;
+
+                                sb.append(line);
+
+                                // check for end of declaration
+                                if (line.endsWith(";")) {
+                                    sb.deleteCharAt(sb.length() - 1);
+
+                                    String result = this.prefix.apply(sb.toString().trim());
+                                    if (!result.isEmpty()) s.addBatch(result);
+
+                                    // reset
+                                    sb = new StringBuilder();
+                                }
+                            }
+                            s.executeBatch();
                         }
                     }
                 }
-            } catch (Exception e) {
-                e.printStackTrace();
             }
+        }
 
-
+        // migrations
+        try {
+            if (!(this.provider instanceof SQLiteConnectionFactory) && !(this.provider instanceof PostgreConnectionFactory)) {
+                try (Connection connection = this.provider.getConnection()) {
+                    try (Statement s = connection.createStatement()) {
+                        s.execute(this.prefix.apply("ALTER TABLE {prefix}actions MODIFY COLUMN actor_name VARCHAR(100)"));
+                        s.execute(this.prefix.apply("ALTER TABLE {prefix}actions MODIFY COLUMN action VARCHAR(300)"));
+                    }
+                }
+            }
         } catch (Exception e) {
-            this.plugin.getLog().severe("Error occurred whilst initialising the database.");
             e.printStackTrace();
         }
     }
@@ -266,20 +267,18 @@ public class SqlDao extends AbstractDao {
 
     @Override
     public void applyBulkUpdate(BulkUpdate bulkUpdate) throws SQLException {
-        String queryString = bulkUpdate.buildAsSql();
-
         try (Connection c = this.provider.getConnection()) {
             if (bulkUpdate.getDataType().isIncludingUsers()) {
                 String table = this.prefix.apply("{prefix}user_permissions");
-                try (Statement s = c.createStatement()) {
-                    s.execute(queryString.replace("{table}", table));
+                try (PreparedStatement ps = bulkUpdate.buildAsSql().build(c, q -> q.replace("{table}", table))) {
+                    ps.execute();
                 }
             }
 
             if (bulkUpdate.getDataType().isIncludingGroups()) {
                 String table = this.prefix.apply("{prefix}group_permissions");
-                try (Statement s = c.createStatement()) {
-                    s.execute(queryString.replace("{table}", table));
+                try (PreparedStatement ps = bulkUpdate.buildAsSql().build(c, q -> q.replace("{table}", table))) {
+                    ps.execute();
                 }
             }
         }
@@ -290,9 +289,9 @@ public class SqlDao extends AbstractDao {
         User user = this.plugin.getUserManager().getOrMake(UserIdentifier.of(uuid, username));
         user.getIoLock().lock();
         try {
-            List<NodeModel> data = new ArrayList<>();
-            AtomicReference<String> primaryGroup = new AtomicReference<>(null);
-            AtomicReference<String> userName = new AtomicReference<>(null);
+            List<NodeDataContainer> data = new ArrayList<>();
+            String primaryGroup = null;
+            String userName = null;
 
             // Collect user permissions
             try (Connection c = this.provider.getConnection()) {
@@ -315,32 +314,31 @@ public class SqlDao extends AbstractDao {
 
             // Collect user meta (username & primary group)
             try (Connection c = this.provider.getConnection()) {
-                try (PreparedStatement ps = c.prepareStatement(this.prefix.apply(PLAYER_SELECT))) {
+                try (PreparedStatement ps = c.prepareStatement(this.prefix.apply(PLAYER_SELECT_BY_UUID))) {
                     ps.setString(1, user.getUuid().toString());
 
                     try (ResultSet rs = ps.executeQuery()) {
                         if (rs.next()) {
-                            userName.set(rs.getString("username"));
-                            primaryGroup.set(rs.getString("primary_group"));
+                            userName = rs.getString("username");
+                            primaryGroup = rs.getString("primary_group");
                         }
                     }
                 }
             }
 
             // update username & primary group
-            String pg = primaryGroup.get();
-            if (pg == null) {
-                pg = NodeFactory.DEFAULT_GROUP_NAME;
+            if (primaryGroup == null) {
+                primaryGroup = NodeFactory.DEFAULT_GROUP_NAME;
             }
-            user.getPrimaryGroup().setStoredValue(pg);
+            user.getPrimaryGroup().setStoredValue(primaryGroup);
 
             // Update their username to what was in the storage if the one in the local instance is null
-            user.setName(userName.get(), true);
+            user.setName(userName, true);
 
             // If the user has any data in storage
             if (!data.isEmpty()) {
-                Set<Node> nodes = data.stream().map(NodeModel::toNode).collect(Collectors.toSet());
-                user.setEnduringNodes(nodes);
+                Set<Node> nodes = data.stream().map(NodeDataContainer::toNode).collect(Collectors.toSet());
+                user.setNodes(NodeMapType.ENDURING, nodes);
 
                 // Save back to the store if data they were given any defaults or had permissions expire
                 if (this.plugin.getUserManager().giveDefaultIfNeeded(user, false) | user.auditTemporaryPermissions()) {
@@ -357,9 +355,9 @@ public class SqlDao extends AbstractDao {
                 }
             }
         } finally {
+            user.invalidateCachedData();
             user.getIoLock().unlock();
         }
-        user.getRefreshBuffer().requestDirectly();
         return user;
     }
 
@@ -374,7 +372,7 @@ public class SqlDao extends AbstractDao {
                         ps.setString(1, user.getUuid().toString());
                         ps.execute();
                     }
-                    try (PreparedStatement ps = c.prepareStatement(this.prefix.apply(PLAYER_UPDATE_PRIMARY_GROUP))) {
+                    try (PreparedStatement ps = c.prepareStatement(this.prefix.apply(PLAYER_UPDATE_PRIMARY_GROUP_BY_UUID))) {
                         ps.setString(1, NodeFactory.DEFAULT_GROUP_NAME);
                         ps.setString(2, user.getUuid().toString());
                         ps.execute();
@@ -384,7 +382,7 @@ public class SqlDao extends AbstractDao {
             }
 
             // Get a snapshot of current data.
-            Set<NodeModel> remote = new HashSet<>();
+            Set<NodeDataContainer> remote = new HashSet<>();
             try (Connection c = this.provider.getConnection()) {
                 try (PreparedStatement ps = c.prepareStatement(this.prefix.apply(USER_PERMISSIONS_SELECT))) {
                     ps.setString(1, user.getUuid().toString());
@@ -403,17 +401,17 @@ public class SqlDao extends AbstractDao {
                 }
             }
 
-            Set<NodeModel> local = user.getEnduringNodes().values().stream().map(NodeModel::fromNode).collect(Collectors.toSet());
+            Set<NodeDataContainer> local = user.enduringData().immutable().values().stream().map(NodeDataContainer::fromNode).collect(Collectors.toSet());
 
-            Map.Entry<Set<NodeModel>, Set<NodeModel>> diff = compareSets(local, remote);
+            Map.Entry<Set<NodeDataContainer>, Set<NodeDataContainer>> diff = compareSets(local, remote);
 
-            Set<NodeModel> toAdd = diff.getKey();
-            Set<NodeModel> toRemove = diff.getValue();
+            Set<NodeDataContainer> toAdd = diff.getKey();
+            Set<NodeDataContainer> toRemove = diff.getValue();
 
             if (!toRemove.isEmpty()) {
                 try (Connection c = this.provider.getConnection()) {
                     try (PreparedStatement ps = c.prepareStatement(this.prefix.apply(USER_PERMISSIONS_DELETE_SPECIFIC))) {
-                        for (NodeModel nd : toRemove) {
+                        for (NodeDataContainer nd : toRemove) {
                             ps.setString(1, user.getUuid().toString());
                             ps.setString(2, nd.getPermission());
                             ps.setBoolean(3, nd.getValue());
@@ -431,7 +429,7 @@ public class SqlDao extends AbstractDao {
             if (!toAdd.isEmpty()) {
                 try (Connection c = this.provider.getConnection()) {
                     try (PreparedStatement ps = c.prepareStatement(this.prefix.apply(USER_PERMISSIONS_INSERT))) {
-                        for (NodeModel nd : toAdd) {
+                        for (NodeDataContainer nd : toAdd) {
                             ps.setString(1, user.getUuid().toString());
                             ps.setString(2, nd.getPermission());
                             ps.setBoolean(3, nd.getValue());
@@ -449,7 +447,7 @@ public class SqlDao extends AbstractDao {
             try (Connection c = this.provider.getConnection()) {
                 boolean hasPrimaryGroupSaved;
 
-                try (PreparedStatement ps = c.prepareStatement(this.prefix.apply(PLAYER_SELECT_PRIMARY_GROUP))) {
+                try (PreparedStatement ps = c.prepareStatement(this.prefix.apply(PLAYER_SELECT_PRIMARY_GROUP_BY_UUID))) {
                     ps.setString(1, user.getUuid().toString());
                     try (ResultSet rs = ps.executeQuery()) {
                         hasPrimaryGroupSaved = rs.next();
@@ -458,7 +456,7 @@ public class SqlDao extends AbstractDao {
 
                 if (hasPrimaryGroupSaved) {
                     // update
-                    try (PreparedStatement ps = c.prepareStatement(this.prefix.apply(PLAYER_UPDATE_PRIMARY_GROUP))) {
+                    try (PreparedStatement ps = c.prepareStatement(this.prefix.apply(PLAYER_UPDATE_PRIMARY_GROUP_BY_UUID))) {
                         ps.setString(1, user.getPrimaryGroup().getStoredValue().orElse(NodeFactory.DEFAULT_GROUP_NAME));
                         ps.setString(2, user.getUuid().toString());
                         ps.execute();
@@ -496,21 +494,24 @@ public class SqlDao extends AbstractDao {
     }
 
     @Override
-    public List<HeldPermission<UUID>> getUsersWithPermission(String permission) throws SQLException {
+    public List<HeldPermission<UUID>> getUsersWithPermission(Constraint constraint) throws SQLException {
+        PreparedStatementBuilder builder = new PreparedStatementBuilder().append(USER_PERMISSIONS_SELECT_PERMISSION);
+        constraint.appendSql(builder, "permission");
+
         List<HeldPermission<UUID>> held = new ArrayList<>();
         try (Connection c = this.provider.getConnection()) {
-            try (PreparedStatement ps = c.prepareStatement(this.prefix.apply(USER_PERMISSIONS_SELECT_PERMISSION))) {
-                ps.setString(1, permission);
+            try (PreparedStatement ps = builder.build(c, this.prefix)) {
                 try (ResultSet rs = ps.executeQuery()) {
                     while (rs.next()) {
                         UUID holder = UUID.fromString(rs.getString("uuid"));
+                        String perm = rs.getString("permission");
                         boolean value = rs.getBoolean("value");
                         String server = rs.getString("server");
                         String world = rs.getString("world");
                         long expiry = rs.getLong("expiry");
                         String contexts = rs.getString("contexts");
 
-                        NodeModel data = deserializeNode(permission, value, server, world, expiry, contexts);
+                        NodeDataContainer data = deserializeNode(perm, value, server, world, expiry, contexts);
                         held.add(NodeHeldPermission.of(holder, data));
                     }
                 }
@@ -569,7 +570,7 @@ public class SqlDao extends AbstractDao {
         Group group = this.plugin.getGroupManager().getOrMake(name);
         group.getIoLock().lock();
         try {
-            List<NodeModel> data = new ArrayList<>();
+            List<NodeDataContainer> data = new ArrayList<>();
 
             try (Connection c = this.provider.getConnection()) {
                 try (PreparedStatement ps = c.prepareStatement(this.prefix.apply(GROUP_PERMISSIONS_SELECT))) {
@@ -590,15 +591,15 @@ public class SqlDao extends AbstractDao {
             }
 
             if (!data.isEmpty()) {
-                Set<Node> nodes = data.stream().map(NodeModel::toNode).collect(Collectors.toSet());
-                group.setEnduringNodes(nodes);
+                Set<Node> nodes = data.stream().map(NodeDataContainer::toNode).collect(Collectors.toSet());
+                group.setNodes(NodeMapType.ENDURING, nodes);
             } else {
                 group.clearNodes();
             }
         } finally {
+            group.invalidateCachedData();
             group.getIoLock().unlock();
         }
-        group.getRefreshBuffer().requestDirectly();
         return Optional.of(group);
     }
 
@@ -640,7 +641,7 @@ public class SqlDao extends AbstractDao {
         group.getIoLock().lock();
         try {
             // Empty data, just delete.
-            if (group.getEnduringNodes().isEmpty()) {
+            if (group.enduringData().immutable().isEmpty()) {
                 try (Connection c = this.provider.getConnection()) {
                     try (PreparedStatement ps = c.prepareStatement(this.prefix.apply(GROUP_PERMISSIONS_DELETE))) {
                         ps.setString(1, group.getName());
@@ -651,7 +652,7 @@ public class SqlDao extends AbstractDao {
             }
 
             // Get a snapshot of current data
-            Set<NodeModel> remote = new HashSet<>();
+            Set<NodeDataContainer> remote = new HashSet<>();
             try (Connection c = this.provider.getConnection()) {
                 try (PreparedStatement ps = c.prepareStatement(this.prefix.apply(GROUP_PERMISSIONS_SELECT))) {
                     ps.setString(1, group.getName());
@@ -670,17 +671,17 @@ public class SqlDao extends AbstractDao {
                 }
             }
 
-            Set<NodeModel> local = group.getEnduringNodes().values().stream().map(NodeModel::fromNode).collect(Collectors.toSet());
+            Set<NodeDataContainer> local = group.enduringData().immutable().values().stream().map(NodeDataContainer::fromNode).collect(Collectors.toSet());
 
-            Map.Entry<Set<NodeModel>, Set<NodeModel>> diff = compareSets(local, remote);
+            Map.Entry<Set<NodeDataContainer>, Set<NodeDataContainer>> diff = compareSets(local, remote);
 
-            Set<NodeModel> toAdd = diff.getKey();
-            Set<NodeModel> toRemove = diff.getValue();
+            Set<NodeDataContainer> toAdd = diff.getKey();
+            Set<NodeDataContainer> toRemove = diff.getValue();
 
             if (!toRemove.isEmpty()) {
                 try (Connection c = this.provider.getConnection()) {
                     try (PreparedStatement ps = c.prepareStatement(this.prefix.apply(GROUP_PERMISSIONS_DELETE_SPECIFIC))) {
-                        for (NodeModel nd : toRemove) {
+                        for (NodeDataContainer nd : toRemove) {
                             ps.setString(1, group.getName());
                             ps.setString(2, nd.getPermission());
                             ps.setBoolean(3, nd.getValue());
@@ -698,7 +699,7 @@ public class SqlDao extends AbstractDao {
             if (!toAdd.isEmpty()) {
                 try (Connection c = this.provider.getConnection()) {
                     try (PreparedStatement ps = c.prepareStatement(this.prefix.apply(GROUP_PERMISSIONS_INSERT))) {
-                        for (NodeModel nd : toAdd) {
+                        for (NodeDataContainer nd : toAdd) {
                             ps.setString(1, group.getName());
                             ps.setString(2, nd.getPermission());
                             ps.setBoolean(3, nd.getValue());
@@ -740,21 +741,24 @@ public class SqlDao extends AbstractDao {
     }
 
     @Override
-    public List<HeldPermission<String>> getGroupsWithPermission(String permission) throws SQLException {
+    public List<HeldPermission<String>> getGroupsWithPermission(Constraint constraint) throws SQLException {
+        PreparedStatementBuilder builder = new PreparedStatementBuilder().append(GROUP_PERMISSIONS_SELECT_PERMISSION);
+        constraint.appendSql(builder, "permission");
+
         List<HeldPermission<String>> held = new ArrayList<>();
         try (Connection c = this.provider.getConnection()) {
-            try (PreparedStatement ps = c.prepareStatement(this.prefix.apply(GROUP_PERMISSIONS_SELECT_PERMISSION))) {
-                ps.setString(1, permission);
+            try (PreparedStatement ps = builder.build(c, this.prefix)) {
                 try (ResultSet rs = ps.executeQuery()) {
                     while (rs.next()) {
                         String holder = rs.getString("name");
+                        String perm = rs.getString("permission");
                         boolean value = rs.getBoolean("value");
                         String server = rs.getString("server");
                         String world = rs.getString("world");
                         long expiry = rs.getLong("expiry");
                         String contexts = rs.getString("contexts");
 
-                        NodeModel data = deserializeNode(permission, value, server, world, expiry, contexts);
+                        NodeDataContainer data = deserializeNode(perm, value, server, world, expiry, contexts);
                         held.add(NodeHeldPermission.of(holder, data));
                     }
                 }
@@ -768,24 +772,23 @@ public class SqlDao extends AbstractDao {
         Track track = this.plugin.getTrackManager().getOrMake(name);
         track.getIoLock().lock();
         try {
-            AtomicBoolean exists = new AtomicBoolean(false);
-            AtomicReference<String> groups = new AtomicReference<>(null);
-
+            boolean exists = false;
+            String groups = null;
             try (Connection c = this.provider.getConnection()) {
                 try (PreparedStatement ps = c.prepareStatement(this.prefix.apply(TRACK_SELECT))) {
                     ps.setString(1, track.getName());
                     try (ResultSet rs = ps.executeQuery()) {
                         if (rs.next()) {
-                            exists.set(true);
-                            groups.set(rs.getString("groups"));
+                            exists = true;
+                            groups = rs.getString("groups");
                         }
                     }
                 }
             }
 
-            if (exists.get()) {
+            if (exists) {
                 // Track exists, let's load.
-                track.setGroups(this.gson.fromJson(groups.get(), LIST_STRING_TYPE));
+                track.setGroups(this.gson.fromJson(groups, LIST_STRING_TYPE));
             } else {
                 String json = this.gson.toJson(track.getGroups());
                 try (Connection c = this.provider.getConnection()) {
@@ -809,14 +812,13 @@ public class SqlDao extends AbstractDao {
             track.getIoLock().lock();
         }
         try {
-            AtomicReference<String> groups = new AtomicReference<>(null);
-
+            String groups;
             try (Connection c = this.provider.getConnection()) {
                 try (PreparedStatement ps = c.prepareStatement(this.prefix.apply(TRACK_SELECT))) {
                     ps.setString(1, name);
                     try (ResultSet rs = ps.executeQuery()) {
                         if (rs.next()) {
-                            groups.set(rs.getString("groups"));
+                            groups = rs.getString("groups");
                         } else {
                             return Optional.empty();
                         }
@@ -829,7 +831,7 @@ public class SqlDao extends AbstractDao {
                 track.getIoLock().lock();
             }
 
-            track.setGroups(this.gson.fromJson(groups.get(), LIST_STRING_TYPE));
+            track.setGroups(this.gson.fromJson(groups, LIST_STRING_TYPE));
             return Optional.of(track);
 
         } finally {
@@ -907,91 +909,91 @@ public class SqlDao extends AbstractDao {
     }
 
     @Override
-    public void saveUUIDData(UUID uuid, String username) throws SQLException {
-        final String u = username.toLowerCase();
-        AtomicReference<String> remoteUserName = new AtomicReference<>(null);
+    public PlayerSaveResult savePlayerData(UUID uuid, String username) throws SQLException {
+        username = username.toLowerCase();
 
-        // cleanup any old values
-        try (Connection c = this.provider.getConnection()) {
-            try (PreparedStatement ps = c.prepareStatement(this.prefix.apply(PLAYER_DELETE))) {
-                ps.setString(1, u);
-                ps.setString(2, uuid.toString());
-                ps.execute();
-            }
-        }
+        // find any existing mapping
+        String oldUsername = getPlayerName(uuid);
 
-        try (Connection c = this.provider.getConnection()) {
-            try (PreparedStatement ps = c.prepareStatement(this.prefix.apply(PLAYER_SELECT_USERNAME))) {
-                ps.setString(1, uuid.toString());
-                try (ResultSet rs = ps.executeQuery()) {
-                    if (rs.next()) {
-                        remoteUserName.set(rs.getString("username"));
+        // do the insert
+        if (!username.equalsIgnoreCase(oldUsername)) {
+            try (Connection c = this.provider.getConnection()) {
+                if (oldUsername != null) {
+                    try (PreparedStatement ps = c.prepareStatement(this.prefix.apply(PLAYER_UPDATE_USERNAME_FOR_UUID))) {
+                        ps.setString(1, username);
+                        ps.setString(2, uuid.toString());
+                        ps.execute();
+                    }
+                } else {
+                    try (PreparedStatement ps = c.prepareStatement(this.prefix.apply(PLAYER_INSERT))) {
+                        ps.setString(1, uuid.toString());
+                        ps.setString(2, username);
+                        ps.setString(3, NodeFactory.DEFAULT_GROUP_NAME);
+                        ps.execute();
                     }
                 }
             }
         }
 
-        if (remoteUserName.get() != null) {
-            // the value is already correct
-            if (remoteUserName.get().equals(u)) {
-                return;
-            }
+        PlayerSaveResultImpl result = PlayerSaveResultImpl.determineBaseResult(username, oldUsername);
 
+        Set<UUID> conflicting = new HashSet<>();
+        try (Connection c = this.provider.getConnection()) {
+            try (PreparedStatement ps = c.prepareStatement(this.prefix.apply(PLAYER_SELECT_ALL_UUIDS_BY_USERNAME))) {
+                ps.setString(1, username);
+                ps.setString(2, uuid.toString());
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        conflicting.add(UUID.fromString(rs.getString("uuid")));
+                    }
+                }
+            }
+        }
+
+        if (!conflicting.isEmpty()) {
+            // remove the mappings for conflicting uuids
             try (Connection c = this.provider.getConnection()) {
-                try (PreparedStatement ps = c.prepareStatement(this.prefix.apply(PLAYER_UPDATE))) {
-                    ps.setString(1, u);
+                try (PreparedStatement ps = c.prepareStatement(this.prefix.apply(PLAYER_DELETE_ALL_UUIDS_BY_USERNAME))) {
+                    ps.setString(1, username);
                     ps.setString(2, uuid.toString());
                     ps.execute();
                 }
             }
-        } else {
-            // first time we've seen this uuid
-            try (Connection c = this.provider.getConnection()) {
-                try (PreparedStatement ps = c.prepareStatement(this.prefix.apply(PLAYER_INSERT))) {
-                    ps.setString(1, uuid.toString());
-                    ps.setString(2, u);
-                    ps.setString(3, NodeFactory.DEFAULT_GROUP_NAME);
-                    ps.execute();
-                }
-            }
+            result = result.withOtherUuidsPresent(conflicting);
         }
+
+        return result;
     }
 
     @Override
-    public UUID getUUID(String username) throws SQLException {
-        final String u = username.toLowerCase();
-        final AtomicReference<UUID> uuid = new AtomicReference<>(null);
-
+    public UUID getPlayerUuid(String username) throws SQLException {
+        username = username.toLowerCase();
         try (Connection c = this.provider.getConnection()) {
-            try (PreparedStatement ps = c.prepareStatement(this.prefix.apply(PLAYER_SELECT_UUID))) {
-                ps.setString(1, u);
+            try (PreparedStatement ps = c.prepareStatement(this.prefix.apply(PLAYER_SELECT_UUID_BY_USERNAME))) {
+                ps.setString(1, username);
                 try (ResultSet rs = ps.executeQuery()) {
                     if (rs.next()) {
-                        uuid.set(UUID.fromString(rs.getString("uuid")));
+                        return UUID.fromString(rs.getString("uuid"));
                     }
                 }
             }
         }
-
-        return uuid.get();
+        return null;
     }
 
     @Override
-    public String getName(UUID uuid) throws SQLException {
-        final AtomicReference<String> name = new AtomicReference<>(null);
-
+    public String getPlayerName(UUID uuid) throws SQLException {
         try (Connection c = this.provider.getConnection()) {
-            try (PreparedStatement ps = c.prepareStatement(this.prefix.apply(PLAYER_SELECT_USERNAME))) {
+            try (PreparedStatement ps = c.prepareStatement(this.prefix.apply(PLAYER_SELECT_USERNAME_BY_UUID))) {
                 ps.setString(1, uuid.toString());
                 try (ResultSet rs = ps.executeQuery()) {
                     if (rs.next()) {
-                        name.set(rs.getString("username"));
+                        return rs.getString("username");
                     }
                 }
             }
         }
-
-        return name.get();
+        return null;
     }
 
     /**
@@ -1000,20 +1002,20 @@ public class SqlDao extends AbstractDao {
      * @param remote the remote set
      * @return the entries to add to remote, and the entries to remove from remote
      */
-    private static Map.Entry<Set<NodeModel>, Set<NodeModel>> compareSets(Set<NodeModel> local, Set<NodeModel> remote) {
+    private static Map.Entry<Set<NodeDataContainer>, Set<NodeDataContainer>> compareSets(Set<NodeDataContainer> local, Set<NodeDataContainer> remote) {
         // entries in local but not remote need to be added
         // entries in remote but not local need to be removed
 
-        Set<NodeModel> toAdd = new HashSet<>(local);
+        Set<NodeDataContainer> toAdd = new HashSet<>(local);
         toAdd.removeAll(remote);
 
-        Set<NodeModel> toRemove = new HashSet<>(remote);
+        Set<NodeDataContainer> toRemove = new HashSet<>(remote);
         toRemove.removeAll(local);
 
         return Maps.immutableEntry(toAdd, toRemove);
     }
 
-    private NodeModel deserializeNode(String permission, boolean value, String server, String world, long expiry, String contexts) {
-        return NodeModel.of(permission, value, server, world, expiry, ContextSetJsonSerializer.deserializeContextSet(this.gson, contexts).makeImmutable());
+    private NodeDataContainer deserializeNode(String permission, boolean value, String server, String world, long expiry, String contexts) {
+        return NodeDataContainer.of(permission, value, server, world, expiry, ContextSetJsonSerializer.deserializeContextSet(this.gson, contexts).makeImmutable());
     }
 }

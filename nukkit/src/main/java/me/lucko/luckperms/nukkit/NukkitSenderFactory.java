@@ -26,9 +26,9 @@
 package me.lucko.luckperms.nukkit;
 
 import me.lucko.luckperms.api.Tristate;
-import me.lucko.luckperms.common.commands.CommandManager;
-import me.lucko.luckperms.common.commands.sender.SenderFactory;
+import me.lucko.luckperms.common.command.CommandManager;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
+import me.lucko.luckperms.common.sender.SenderFactory;
 import me.lucko.luckperms.common.utils.TextUtils;
 
 import net.kyori.text.Component;
@@ -69,7 +69,7 @@ public class NukkitSenderFactory extends SenderFactory<CommandSender> {
         }
 
         // otherwise, send the message sync
-        getPlugin().getScheduler().doSync(new SyncMessengerAgent(sender, s));
+        getPlugin().getBootstrap().getScheduler().executeSync(new SyncMessengerAgent(sender, s));
     }
 
     @Override

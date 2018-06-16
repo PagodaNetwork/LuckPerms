@@ -161,6 +161,9 @@ public final class LPSubscriptionMap extends HashMap<String, Map<Permissible, Bo
         private LPSubscriptionValueMap(String permission, Map<Permissible, Boolean> backing) {
             this.permission = permission;
             this.backing = backing;
+
+            // remove all players from the map
+            this.backing.keySet().removeIf(p -> p instanceof Player);
         }
 
         public LPSubscriptionValueMap(String permission) {
@@ -198,6 +201,16 @@ public final class LPSubscriptionMap extends HashMap<String, Map<Permissible, Bo
         }
 
         @Override
+        public Boolean put(Permissible key, Boolean value) {
+            // don't allow players to be put into this map
+            if (key instanceof Player) {
+                return true;
+            }
+
+            return this.backing.put(key, value);
+        }
+
+        @Override
         public boolean containsKey(Object key) {
             // delegate through the get method
             return get(key) != null;
@@ -207,7 +220,7 @@ public final class LPSubscriptionMap extends HashMap<String, Map<Permissible, Bo
         @Override
         public Set<Permissible> keySet() {
             // gather players (LPPermissibles)
-            Set<Permissible> players = LPSubscriptionMap.this.plugin.getServer().getOnlinePlayers().stream()
+            Set<Permissible> players = LPSubscriptionMap.this.plugin.getBootstrap().getServer().getOnlinePlayers().stream()
                     .filter(player -> player.isPermissionSet(this.permission))
                     .collect(Collectors.toSet());
 
@@ -240,11 +253,6 @@ public final class LPSubscriptionMap extends HashMap<String, Map<Permissible, Bo
         }
 
         // just delegate to the backing map
-
-        @Override
-        public Boolean put(Permissible key, Boolean value) {
-            return this.backing.put(key, value);
-        }
 
         @Override
         public Boolean remove(Object key) {

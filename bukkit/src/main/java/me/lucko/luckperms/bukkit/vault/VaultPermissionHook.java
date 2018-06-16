@@ -34,12 +34,12 @@ import me.lucko.luckperms.api.context.ContextSet;
 import me.lucko.luckperms.api.context.MutableContextSet;
 import me.lucko.luckperms.bukkit.LPBukkitPlugin;
 import me.lucko.luckperms.common.caching.type.PermissionCache;
-import me.lucko.luckperms.common.commands.CommandManager;
+import me.lucko.luckperms.common.command.CommandManager;
 import me.lucko.luckperms.common.config.ConfigKeys;
 import me.lucko.luckperms.common.model.Group;
 import me.lucko.luckperms.common.model.PermissionHolder;
 import me.lucko.luckperms.common.model.User;
-import me.lucko.luckperms.common.node.NodeFactory;
+import me.lucko.luckperms.common.node.factory.NodeFactory;
 import me.lucko.luckperms.common.verbose.CheckOrigin;
 
 import net.milkbowl.vault.permission.Permission;
@@ -48,6 +48,7 @@ import org.bukkit.entity.Player;
 
 import java.util.Arrays;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -116,8 +117,10 @@ public class VaultPermissionHook extends AbstractVaultPermission {
     }
 
     @Override
-    public boolean hasPermission(String world, UUID uuid, String permission) {
-        Objects.requireNonNull(uuid, "uuid");
+    public boolean userHasPermission(String world, UUID uuid, String permission) {
+        if (uuid == null) {
+            return false;
+        }
         Objects.requireNonNull(permission, "permission");
 
         User user = getUser(uuid);
@@ -130,14 +133,16 @@ public class VaultPermissionHook extends AbstractVaultPermission {
 
         Tristate result = permissionData.getPermissionValue(permission, CheckOrigin.INTERNAL);
         if (log()) {
-            logMsg("#hasPermission: %s - %s - %s - %s", user.getFriendlyName(), contexts.getContexts().toMultimap(), permission, result);
+            logMsg("#userHasPermission: %s - %s - %s - %s", user.getFriendlyName(), contexts.getContexts().toMultimap(), permission, result);
         }
         return result.asBoolean();
     }
 
     @Override
-    public boolean playerAddPermission(String world, UUID uuid, String permission) {
-        Objects.requireNonNull(uuid, "uuid");
+    public boolean userAddPermission(String world, UUID uuid, String permission) {
+        if (uuid == null) {
+            return false;
+        }
         Objects.requireNonNull(permission, "permission");
 
         User user = getUser(uuid);
@@ -150,8 +155,10 @@ public class VaultPermissionHook extends AbstractVaultPermission {
     }
 
     @Override
-    public boolean playerRemovePermission(String world, UUID uuid, String permission) {
-        Objects.requireNonNull(uuid, "uuid");
+    public boolean userRemovePermission(String world, UUID uuid, String permission) {
+        if (uuid == null) {
+            return false;
+        }
         Objects.requireNonNull(permission, "permission");
 
         User user = getUser(uuid);
@@ -164,29 +171,37 @@ public class VaultPermissionHook extends AbstractVaultPermission {
     }
 
     @Override
-    public boolean playerInGroup(String world, UUID uuid, String group) {
-        Objects.requireNonNull(uuid, "uuid");
+    public boolean userInGroup(String world, UUID uuid, String group) {
+        if (uuid == null) {
+            return false;
+        }
         Objects.requireNonNull(group, "group");
-        return hasPermission(world, uuid, NodeFactory.groupNode(rewriteGroupName(group)));
+        return userHasPermission(world, uuid, NodeFactory.groupNode(rewriteGroupName(group)));
     }
 
     @Override
-    public boolean playerAddGroup(String world, UUID uuid, String group) {
-        Objects.requireNonNull(uuid, "uuid");
+    public boolean userAddGroup(String world, UUID uuid, String group) {
+        if (uuid == null) {
+            return false;
+        }
         Objects.requireNonNull(group, "group");
-        return checkGroupExists(group) && playerAddPermission(world, uuid, NodeFactory.groupNode(rewriteGroupName(group)));
+        return checkGroupExists(group) && userAddPermission(world, uuid, NodeFactory.groupNode(rewriteGroupName(group)));
     }
 
     @Override
-    public boolean playerRemoveGroup(String world, UUID uuid, String group) {
-        Objects.requireNonNull(uuid, "uuid");
+    public boolean userRemoveGroup(String world, UUID uuid, String group) {
+        if (uuid == null) {
+            return false;
+        }
         Objects.requireNonNull(group, "group");
-        return checkGroupExists(group) && playerRemovePermission(world, uuid, NodeFactory.groupNode(rewriteGroupName(group)));
+        return checkGroupExists(group) && userRemovePermission(world, uuid, NodeFactory.groupNode(rewriteGroupName(group)));
     }
 
     @Override
-    public String[] playerGetGroups(String world, UUID uuid) {
-        Objects.requireNonNull(uuid, "uuid");
+    public String[] userGetGroups(String world, UUID uuid) {
+        if (uuid == null) {
+            return new String[0];
+        }
 
         User user = getUser(uuid);
         if (user == null) {
@@ -195,7 +210,7 @@ public class VaultPermissionHook extends AbstractVaultPermission {
 
         ContextSet contexts = contextForLookup(user, world).getContexts();
 
-        String[] ret = user.getEnduringNodes().values().stream()
+        String[] ret = user.enduringData().immutable().values().stream()
                 .filter(Node::isGroupNode)
                 .filter(n -> n.shouldApplyWithContext(contexts))
                 .map(n -> {
@@ -208,15 +223,17 @@ public class VaultPermissionHook extends AbstractVaultPermission {
                 .toArray(String[]::new);
 
         if (log()) {
-            logMsg("#playerGetGroups: %s - %s - %s", user.getFriendlyName(), contexts, Arrays.toString(ret));
+            logMsg("#userGetGroups: %s - %s - %s", user.getFriendlyName(), contexts, Arrays.toString(ret));
         }
 
         return ret;
     }
 
     @Override
-    public String playerPrimaryGroup(String world, UUID uuid) {
-        Objects.requireNonNull(uuid, "uuid");
+    public String userGetPrimaryGroup(String world, UUID uuid) {
+        if (uuid == null) {
+            return null;
+        }
 
         User user = getUser(uuid);
         if (user == null) {
@@ -230,7 +247,7 @@ public class VaultPermissionHook extends AbstractVaultPermission {
         }
 
         if (log()) {
-            logMsg("#playerPrimaryGroup: %s - %s - %s", user.getFriendlyName(), world, value);
+            logMsg("#userGetPrimaryGroup: %s - %s - %s", user.getFriendlyName(), world, value);
         }
 
         return value;
@@ -311,7 +328,7 @@ public class VaultPermissionHook extends AbstractVaultPermission {
         return this.plugin.getConfiguration().get(ConfigKeys.VAULT_DEBUG);
     }
     private void logMsg(String format, Object... args) {
-        this.plugin.getLog().info("[VAULT-PERMS] " + String.format(format, args)
+        this.plugin.getLogger().info("[VAULT-PERMS] " + String.format(format, args)
                 .replace(CommandManager.SECTION_CHAR, '$')
                 .replace(CommandManager.AMPERSAND_CHAR, '$')
         );
@@ -321,16 +338,18 @@ public class VaultPermissionHook extends AbstractVaultPermission {
     Contexts contextForLookup(User user, String world) {
         MutableContextSet context;
 
-        Player player = user == null ? null : this.plugin.getPlayer(user);
+        Player player = Optional.ofNullable(user).flatMap(u -> this.plugin.getBootstrap().getPlayer(u.getUuid())).orElse(null);
         if (player != null) {
             context = this.plugin.getContextManager().getApplicableContext(player).mutableCopy();
         } else {
             context = this.plugin.getContextManager().getStaticContext().mutableCopy();
         }
 
+        String playerWorld = player == null ? null : player.getWorld().getName();
+
         // if world is null, we want to do a lookup in the players current context
         // if world is not null, we want to do a lookup in that specific world
-        if (world != null && !world.isEmpty()) {
+        if (world != null && !world.isEmpty() && !world.equalsIgnoreCase(playerWorld)) {
             // remove already accumulated worlds
             context.removeAll(Contexts.WORLD_KEY);
             // add the vault world
@@ -348,7 +367,7 @@ public class VaultPermissionHook extends AbstractVaultPermission {
             }
         }
 
-        return new Contexts(context, isIncludeGlobal(), true, true, true, true, false);
+        return Contexts.of(context, isIncludeGlobal(), true, true, true, true, false);
     }
 
     // utility methods for modifying the state of PermissionHolders
@@ -386,11 +405,11 @@ public class VaultPermissionHook extends AbstractVaultPermission {
     void holderSave(PermissionHolder holder) {
         if (holder.getType().isUser()) {
             User u = (User) holder;
-            this.plugin.getStorage().saveUser(u).thenRunAsync(() -> u.getRefreshBuffer().request(), this.plugin.getScheduler().async());
+            this.plugin.getStorage().saveUser(u);
         }
         if (holder.getType().isGroup()) {
             Group g = (Group) holder;
-            this.plugin.getStorage().saveGroup(g).thenRunAsync(() -> this.plugin.getUpdateTaskBuffer().request(), this.plugin.getScheduler().async());
+            this.plugin.getStorage().saveGroup(g).thenRunAsync(() -> this.plugin.getUpdateTaskBuffer().request(), this.plugin.getBootstrap().getScheduler().async());
         }
     }
 

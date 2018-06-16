@@ -25,8 +25,8 @@
 
 package me.lucko.luckperms.common.managers.user;
 
+import me.lucko.luckperms.common.model.UserIdentifier;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
-import me.lucko.luckperms.common.references.UserIdentifier;
 import me.lucko.luckperms.common.utils.ExpiringSet;
 
 import java.util.UUID;
@@ -76,7 +76,7 @@ public class UserHousekeeper implements Runnable {
         UUID uuid = identifier.getUuid();
 
         // unload users which aren't online and who haven't been online (or tried to login) recently
-        if (this.recentlyUsed.contains(uuid) || this.recentlyUsedApi.contains(uuid) || this.plugin.isPlayerOnline(uuid)) {
+        if (this.recentlyUsed.contains(uuid) || this.recentlyUsedApi.contains(uuid) || this.plugin.getBootstrap().isPlayerOnline(uuid)) {
             return;
         }
 

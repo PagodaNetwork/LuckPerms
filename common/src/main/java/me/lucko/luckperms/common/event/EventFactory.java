@@ -30,6 +30,7 @@ import com.google.common.collect.ImmutableSet;
 
 import me.lucko.luckperms.api.LogEntry;
 import me.lucko.luckperms.api.Node;
+import me.lucko.luckperms.api.PlayerSaveResult;
 import me.lucko.luckperms.api.caching.GroupData;
 import me.lucko.luckperms.api.caching.UserData;
 import me.lucko.luckperms.api.event.LuckPermsEvent;
@@ -37,10 +38,9 @@ import me.lucko.luckperms.api.event.cause.CreationCause;
 import me.lucko.luckperms.api.event.cause.DeletionCause;
 import me.lucko.luckperms.api.event.log.LogBroadcastEvent;
 import me.lucko.luckperms.api.event.log.LogNotifyEvent;
-import me.lucko.luckperms.common.api.LuckPermsApiProvider;
+import me.lucko.luckperms.api.event.source.Source;
 import me.lucko.luckperms.common.api.delegates.model.ApiPermissionHolder;
 import me.lucko.luckperms.common.api.delegates.model.ApiUser;
-import me.lucko.luckperms.common.commands.sender.Sender;
 import me.lucko.luckperms.common.event.impl.EventConfigReload;
 import me.lucko.luckperms.common.event.impl.EventGroupCacheLoad;
 import me.lucko.luckperms.common.event.impl.EventGroupCreate;
@@ -56,6 +56,7 @@ import me.lucko.luckperms.common.event.impl.EventLogReceive;
 import me.lucko.luckperms.common.event.impl.EventNodeAdd;
 import me.lucko.luckperms.common.event.impl.EventNodeClear;
 import me.lucko.luckperms.common.event.impl.EventNodeRemove;
+import me.lucko.luckperms.common.event.impl.EventPlayerDataSave;
 import me.lucko.luckperms.common.event.impl.EventPostSync;
 import me.lucko.luckperms.common.event.impl.EventPreNetworkSync;
 import me.lucko.luckperms.common.event.impl.EventPreSync;
@@ -73,27 +74,30 @@ import me.lucko.luckperms.common.event.impl.EventUserFirstLogin;
 import me.lucko.luckperms.common.event.impl.EventUserLoad;
 import me.lucko.luckperms.common.event.impl.EventUserLoginProcess;
 import me.lucko.luckperms.common.event.impl.EventUserPromote;
-import me.lucko.luckperms.common.event.model.EntitySender;
-import me.lucko.luckperms.common.event.model.SourceEntity;
+import me.lucko.luckperms.common.event.model.EntitySourceImpl;
+import me.lucko.luckperms.common.event.model.SenderEntity;
+import me.lucko.luckperms.common.event.model.UnknownSource;
 import me.lucko.luckperms.common.model.Group;
 import me.lucko.luckperms.common.model.PermissionHolder;
 import me.lucko.luckperms.common.model.Track;
 import me.lucko.luckperms.common.model.User;
-import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
+import me.lucko.luckperms.common.sender.Sender;
 
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-public final class EventFactory {
-    private final LuckPermsEventBus eventBus;
+import javax.annotation.Nullable;
 
-    public EventFactory(LuckPermsPlugin plugin, LuckPermsApiProvider apiProvider) {
-        this.eventBus = new LuckPermsEventBus(plugin, apiProvider);
+public final class EventFactory {
+    private final AbstractEventBus eventBus;
+
+    public EventFactory(AbstractEventBus eventBus) {
+        this.eventBus = eventBus;
     }
 
-    public LuckPermsEventBus getEventBus() {
+    public AbstractEventBus getEventBus() {
         return this.eventBus;
     }
 
@@ -115,13 +119,8 @@ public final class EventFactory {
         fireEventAsync(event);
     }
 
-    public void handleGroupDataRecalculate(Group group, GroupData data) {
-        EventGroupDataRecalculate event = new EventGroupDataRecalculate(group.getApiDelegate(), data);
-        fireEventAsync(event);
-    }
-
     public void handleGroupDelete(Group group, DeletionCause cause) {
-        EventGroupDelete event = new EventGroupDelete(group.getName(), ImmutableSet.copyOf(group.getEnduringNodes().values()), cause);
+        EventGroupDelete event = new EventGroupDelete(group.getName(), ImmutableSet.copyOf(group.enduringData().immutable().values()), cause);
         fireEventAsync(event);
     }
 
@@ -168,17 +167,17 @@ public final class EventFactory {
         fireEventAsync(event);
     }
 
-    public void handleNodeAdd(Node node, PermissionHolder target, Collection<Node> before, Collection<Node> after) {
+    public void handleNodeAdd(Node node, PermissionHolder target, Collection<? extends Node> before, Collection<? extends Node> after) {
         EventNodeAdd event = new EventNodeAdd(node, getDelegate(target), ImmutableSet.copyOf(before), ImmutableSet.copyOf(after));
         fireEventAsync(event);
     }
 
-    public void handleNodeClear(PermissionHolder target, Collection<Node> before, Collection<Node> after) {
+    public void handleNodeClear(PermissionHolder target, Collection<? extends Node> before, Collection<? extends Node> after) {
         EventNodeClear event = new EventNodeClear(getDelegate(target), ImmutableSet.copyOf(before), ImmutableSet.copyOf(after));
         fireEventAsync(event);
     }
 
-    public void handleNodeRemove(Node node, PermissionHolder target, Collection<Node> before, Collection<Node> after) {
+    public void handleNodeRemove(Node node, PermissionHolder target, Collection<? extends Node> before, Collection<? extends Node> after) {
         EventNodeRemove event = new EventNodeRemove(node, getDelegate(target), ImmutableSet.copyOf(before), ImmutableSet.copyOf(after));
         fireEventAsync(event);
     }
@@ -247,13 +246,25 @@ public final class EventFactory {
         fireEventAsync(event);
     }
 
-    public void handleUserDataRecalculate(User user, UserData data) {
-        EventUserDataRecalculate event = new EventUserDataRecalculate(new ApiUser(user), data);
-        fireEventAsync(event);
+    public void handleDataRecalculate(PermissionHolder holder) {
+        if (holder.getType().isUser()) {
+            User user = (User) holder;
+            EventUserDataRecalculate event = new EventUserDataRecalculate(user.getApiDelegate(), user.getCachedData());
+            fireEventAsync(event);
+        } else {
+            Group group = (Group) holder;
+            EventGroupDataRecalculate event = new EventGroupDataRecalculate(group.getApiDelegate(), group.getCachedData());
+            fireEventAsync(event);
+        }
     }
 
     public void handleUserFirstLogin(UUID uuid, String username) {
         EventUserFirstLogin event = new EventUserFirstLogin(uuid, username);
+        fireEventAsync(event);
+    }
+
+    public void handlePlayerDataSave(UUID uuid, String username, PlayerSaveResult result) {
+        EventPlayerDataSave event = new EventPlayerDataSave(uuid, username, result);
         fireEventAsync(event);
     }
 
@@ -267,13 +278,15 @@ public final class EventFactory {
         fireEvent(event);
     }
 
-    public void handleUserDemote(User user, Track track, String from, String to, Sender source) {
-        EventUserDemote event = new EventUserDemote(track.getApiDelegate(), new ApiUser(user), from, to, new SourceEntity(new EntitySender(source)));
+    public void handleUserDemote(User user, Track track, String from, String to, @Nullable Sender source) {
+        Source s = source == null ? UnknownSource.INSTANCE : new EntitySourceImpl(new SenderEntity(source));
+        EventUserDemote event = new EventUserDemote(track.getApiDelegate(), new ApiUser(user), from, to, s);
         fireEventAsync(event);
     }
 
-    public void handleUserPromote(User user, Track track, String from, String to, Sender source) {
-        EventUserPromote event = new EventUserPromote(track.getApiDelegate(), new ApiUser(user), from, to, new SourceEntity(new EntitySender(source)));
+    public void handleUserPromote(User user, Track track, String from, String to, @Nullable Sender source) {
+        Source s = source == null ? UnknownSource.INSTANCE : new EntitySourceImpl(new SenderEntity(source));
+        EventUserPromote event = new EventUserPromote(track.getApiDelegate(), new ApiUser(user), from, to, s);
         fireEventAsync(event);
     }
 

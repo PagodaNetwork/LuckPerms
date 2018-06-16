@@ -27,7 +27,9 @@ package me.lucko.luckperms.common.storage.dao.sql.connection.file;
 
 import me.lucko.luckperms.common.storage.dao.sql.connection.AbstractConnectionFactory;
 
-import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.text.DecimalFormat;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -35,9 +37,9 @@ import java.util.Map;
 abstract class FlatfileConnectionFactory extends AbstractConnectionFactory {
     protected static final DecimalFormat DF = new DecimalFormat("#.##");
 
-    protected final File file;
+    protected final Path file;
 
-    FlatfileConnectionFactory(String name, File file) {
+    FlatfileConnectionFactory(String name, Path file) {
         super(name);
         this.file = file;
     }
@@ -47,7 +49,7 @@ abstract class FlatfileConnectionFactory extends AbstractConnectionFactory {
 
     }
 
-    protected File getWriteFile() {
+    protected Path getWriteFile() {
         return this.file;
     }
 
@@ -55,9 +57,16 @@ abstract class FlatfileConnectionFactory extends AbstractConnectionFactory {
     public Map<String, String> getMeta() {
         Map<String, String> ret = new LinkedHashMap<>();
 
-        File databaseFile = getWriteFile();
-        if (databaseFile.exists()) {
-            double size = databaseFile.length() / 1048576D;
+        Path databaseFile = getWriteFile();
+        if (Files.exists(databaseFile)) {
+            long length;
+            try {
+                length = Files.size(databaseFile);
+            } catch (IOException e) {
+                length = 0;
+            }
+
+            double size = length / 1048576D;
             ret.put("File Size", DF.format(size) + "MB");
         } else {
             ret.put("File Size", "0MB");

@@ -25,22 +25,20 @@
 
 package me.lucko.luckperms.common.model;
 
-import me.lucko.luckperms.api.Contexts;
-import me.lucko.luckperms.common.buffers.BufferedRequest;
+import me.lucko.luckperms.common.api.delegates.model.ApiUser;
 import me.lucko.luckperms.common.caching.UserCachedData;
 import me.lucko.luckperms.common.config.ConfigKeys;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
+import me.lucko.luckperms.common.primarygroup.ContextualHolder;
 import me.lucko.luckperms.common.primarygroup.PrimaryGroupHolder;
-import me.lucko.luckperms.common.references.HolderType;
-import me.lucko.luckperms.common.references.Identifiable;
-import me.lucko.luckperms.common.references.UserIdentifier;
-import me.lucko.luckperms.common.references.UserReference;
 
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
+
+import javax.annotation.Nullable;
 
 public class User extends PermissionHolder implements Identifiable<UserIdentifier> {
+    private final ApiUser apiDelegate = new ApiUser(this);
 
     /**
      * The users Mojang UUID
@@ -50,6 +48,7 @@ public class User extends PermissionHolder implements Identifiable<UserIdentifie
     /**
      * The last known username of a player
      */
+    @Nullable
     private String name = null;
 
     /**
@@ -62,14 +61,11 @@ public class User extends PermissionHolder implements Identifiable<UserIdentifie
      */
     private final UserCachedData cachedData;
 
-    private final BufferedRequest<Void> refreshBuffer;
-
     public User(UUID uuid, String name, LuckPermsPlugin plugin) {
-        super(uuid.toString(), plugin);
+        super(plugin);
         this.uuid = uuid;
         setName(name, false);
 
-        this.refreshBuffer = new UserRefreshBuffer(plugin, this);
         this.primaryGroup = plugin.getConfiguration().get(ConfigKeys.PRIMARY_GROUP_CALCULATION).apply(this);
 
         this.cachedData = new UserCachedData(this);
@@ -80,22 +76,27 @@ public class User extends PermissionHolder implements Identifiable<UserIdentifie
         this(uuid, null, plugin);
     }
 
+    @Override
+    protected void invalidateCache() {
+        super.invalidateCache();
+
+        // invalidate our caches
+        if (this.primaryGroup instanceof ContextualHolder) {
+            ((ContextualHolder) this.primaryGroup).invalidateCache();
+        }
+    }
+
     public UUID getUuid() {
         return this.uuid;
     }
 
-    public PrimaryGroupHolder getPrimaryGroup() {
-        return this.primaryGroup;
+    public Optional<String> getName() {
+        return Optional.ofNullable(this.name);
     }
 
     @Override
-    public UserCachedData getCachedData() {
-        return this.cachedData;
-    }
-
-    @Override
-    public BufferedRequest<Void> getRefreshBuffer() {
-        return this.refreshBuffer;
+    public String getObjectName() {
+        return this.uuid.toString();
     }
 
     @Override
@@ -103,8 +104,22 @@ public class User extends PermissionHolder implements Identifiable<UserIdentifie
         return UserIdentifier.of(this.uuid, this.name);
     }
 
-    public Optional<String> getName() {
-        return Optional.ofNullable(this.name);
+    @Override
+    public String getFriendlyName() {
+        return this.name != null ? this.name : this.uuid.toString();
+    }
+
+    public ApiUser getApiDelegate() {
+        return this.apiDelegate;
+    }
+
+    @Override
+    public UserCachedData getCachedData() {
+        return this.cachedData;
+    }
+
+    public PrimaryGroupHolder getPrimaryGroup() {
+        return this.primaryGroup;
     }
 
     /**
@@ -157,39 +172,8 @@ public class User extends PermissionHolder implements Identifiable<UserIdentifie
     }
 
     @Override
-    public String getFriendlyName() {
-        return this.name != null ? this.name : this.uuid.toString();
-    }
-
-    @Override
-    public UserReference toReference() {
-        return UserReference.of(getId());
-    }
-
-    @Override
     public HolderType getType() {
         return HolderType.USER;
-    }
-
-    /**
-     * Sets up the UserData cache
-     * Blocking call.
-     */
-    public void preCalculateData() {
-        // first try to refresh any existing permissions
-        this.refreshBuffer.requestDirectly();
-
-        // pre-calc the allowall & global contexts
-        // since contexts change so frequently, it's not worth trying to calculate any more than this.
-        this.cachedData.preCalculate(Contexts.allowAll());
-        this.cachedData.preCalculate(Contexts.global());
-    }
-
-    public CompletableFuture<Void> reloadCachedData() {
-        return CompletableFuture.allOf(
-                this.cachedData.reloadPermissions(),
-                this.cachedData.reloadMeta()
-        ).thenAccept(n -> getPlugin().getEventFactory().handleUserDataRecalculate(this, this.cachedData));
     }
 
     /**
@@ -204,13 +188,6 @@ public class User extends PermissionHolder implements Identifiable<UserIdentifie
 
         getPlugin().getUserManager().giveDefaultIfNeeded(this, false);
         return true;
-    }
-
-    public void clearNodes(boolean giveDefault) {
-        super.clearNodes();
-        if (giveDefault) {
-            getPlugin().getUserManager().giveDefaultIfNeeded(this, false);
-        }
     }
 
     @Override
@@ -229,20 +206,6 @@ public class User extends PermissionHolder implements Identifiable<UserIdentifie
     @Override
     public String toString() {
         return "User(uuid=" + this.uuid + ")";
-    }
-
-    private static final class UserRefreshBuffer extends BufferedRequest<Void> {
-        private final User user;
-
-        private UserRefreshBuffer(LuckPermsPlugin plugin, User user) {
-            super(50L, 5L, plugin.getScheduler().async());
-            this.user = user;
-        }
-
-        @Override
-        protected Void perform() {
-            return this.user.reloadCachedData().join();
-        }
     }
 
 }

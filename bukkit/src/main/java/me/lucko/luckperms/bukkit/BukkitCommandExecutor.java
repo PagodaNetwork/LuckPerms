@@ -28,8 +28,8 @@ package me.lucko.luckperms.bukkit;
 import com.google.common.base.Joiner;
 import com.google.common.base.Splitter;
 
-import me.lucko.luckperms.common.commands.CommandManager;
-import me.lucko.luckperms.common.commands.sender.Sender;
+import me.lucko.luckperms.common.command.CommandManager;
+import me.lucko.luckperms.common.sender.Sender;
 
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -45,7 +45,7 @@ public class BukkitCommandExecutor extends CommandManager implements CommandExec
 
     private final LPBukkitPlugin plugin;
 
-    BukkitCommandExecutor(LPBukkitPlugin plugin) {
+    public BukkitCommandExecutor(LPBukkitPlugin plugin) {
         super(plugin);
         this.plugin = plugin;
     }

@@ -26,7 +26,7 @@
 package me.lucko.luckperms.nukkit.listeners;
 
 import me.lucko.luckperms.common.config.ConfigKeys;
-import me.lucko.luckperms.common.locale.Message;
+import me.lucko.luckperms.common.locale.message.Message;
 import me.lucko.luckperms.nukkit.LPNukkitPlugin;
 
 import cn.nukkit.Player;
@@ -90,7 +90,7 @@ public class NukkitPlatformListener implements Listener {
         if (e.getEntity() instanceof Player) {
             Player player = (Player) e.getEntity();
             this.plugin.getContextManager().invalidateCache(player);
-            this.plugin.refreshAutoOp(this.plugin.getUserManager().getIfLoaded(player.getUniqueId()), player);
+            this.plugin.refreshAutoOp(player);
         }
     }
 

@@ -26,9 +26,11 @@
 package me.lucko.luckperms.api;
 
 /**
- * Represents the result of a mutation call.
+ * Represents the result of a data mutation call on a LuckPerms object.
+ *
+ * <p>Usually as the result to a call on a {@link PermissionHolder} or {@link Track}.</p>
  */
-public enum DataMutateResult {
+public enum DataMutateResult implements MutateResult {
 
     /**
      * Indicates the mutation was a success
@@ -50,39 +52,14 @@ public enum DataMutateResult {
      */
     FAIL(false);
 
-    private final boolean value;
+    private final boolean success;
 
-    DataMutateResult(boolean value) {
-        this.value = value;
+    DataMutateResult(boolean success) {
+        this.success = success;
     }
 
-    /**
-     * Gets a boolean representation of the result.
-     *
-     * @return a boolean representation
-     */
-    public boolean asBoolean() {
-        return this.value;
-    }
-
-    /**
-     * Gets if the result indicates a success
-     *
-     * @return if the result indicates a success
-     * @since 3.4
-     */
+    @Override
     public boolean wasSuccess() {
-        return this.value;
+        return this.success;
     }
-
-    /**
-     * Gets if the result indicates a failure
-     *
-     * @return if the result indicates a failure
-     * @since 3.4
-     */
-    public boolean wasFailure() {
-        return !this.value;
-    }
-
 }

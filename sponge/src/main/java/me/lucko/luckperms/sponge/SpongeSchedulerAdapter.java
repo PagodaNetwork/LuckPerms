@@ -25,116 +25,84 @@
 
 package me.lucko.luckperms.sponge;
 
-import me.lucko.luckperms.common.plugin.SchedulerAdapter;
-import me.lucko.luckperms.common.plugin.SchedulerTask;
-import me.lucko.luckperms.common.utils.SafeIteration;
+import me.lucko.luckperms.common.plugin.scheduler.SchedulerAdapter;
+import me.lucko.luckperms.common.plugin.scheduler.SchedulerTask;
+import me.lucko.luckperms.common.utils.Iterators;
 
 import org.spongepowered.api.scheduler.Scheduler;
+import org.spongepowered.api.scheduler.SpongeExecutorService;
 import org.spongepowered.api.scheduler.Task;
 
+import java.util.Collections;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.WeakHashMap;
 import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
 
 public class SpongeSchedulerAdapter implements SchedulerAdapter {
-    private final LPSpongePlugin plugin;
-    private final Set<SchedulerTask> tasks = ConcurrentHashMap.newKeySet();
+    private final LPSpongeBootstrap bootstrap;
+    
+    private final Scheduler scheduler;
+    private final SpongeExecutorService sync;
+    private final SpongeExecutorService async;
+    
+    private final Set<Task> tasks = Collections.newSetFromMap(new WeakHashMap<>());
 
-    public SpongeSchedulerAdapter(LPSpongePlugin plugin) {
-        this.plugin = plugin;
-    }
-
-    private Scheduler scheduler() {
-        return this.plugin.getSpongeScheduler();
+    public SpongeSchedulerAdapter(LPSpongeBootstrap bootstrap, Scheduler scheduler, SpongeExecutorService sync, SpongeExecutorService async) {
+        this.bootstrap = bootstrap;
+        this.scheduler = scheduler;
+        this.sync = sync;
+        this.async = async;
     }
 
     @Override
     public Executor async() {
-        return this.plugin.getAsyncExecutorService();
+        return this.async;
     }
 
     @Override
     public Executor sync() {
-        return this.plugin.getSyncExecutorService();
+        return this.sync;
     }
 
     @Override
-    public void doAsync(Runnable runnable) {
-        this.plugin.getSpongeScheduler().createTaskBuilder().async().execute(runnable).submit(this.plugin);
+    public void executeAsync(Runnable runnable) {
+        this.scheduler.createTaskBuilder().async().execute(runnable).submit(this.bootstrap);
     }
 
     @Override
-    public void doSync(Runnable runnable) {
-        this.plugin.getSpongeScheduler().createTaskBuilder().execute(runnable).submit(this.plugin);
+    public void executeSync(Runnable runnable) {
+        this.scheduler.createTaskBuilder().execute(runnable).submit(this.bootstrap);
     }
 
     @Override
-    public SchedulerTask asyncRepeating(Runnable runnable, long intervalTicks) {
-        Task task = scheduler().createTaskBuilder()
+    public SchedulerTask asyncLater(Runnable task, long delay, TimeUnit unit) {
+        Task t = this.scheduler.createTaskBuilder()
                 .async()
-                .intervalTicks(intervalTicks)
-                .delayTicks(intervalTicks)
-                .execute(runnable)
-                .submit(this.plugin);
+                .delay(delay, unit)
+                .execute(task)
+                .submit(this.bootstrap);
 
-        SchedulerTask wrapped = new SpongeSchedulerTask(task);
-        this.tasks.add(wrapped);
-        return wrapped;
+        this.tasks.add(t);
+        return t::cancel;
     }
 
     @Override
-    public SchedulerTask syncRepeating(Runnable runnable, long intervalTicks) {
-        Task task = scheduler().createTaskBuilder()
-                .intervalTicks(intervalTicks)
-                .delayTicks(intervalTicks)
-                .execute(runnable)
-                .submit(this.plugin);
-
-        SchedulerTask wrapped = new SpongeSchedulerTask(task);
-        this.tasks.add(wrapped);
-        return wrapped;
-    }
-
-    @Override
-    public SchedulerTask asyncLater(Runnable runnable, long delayTicks) {
-        Task task = scheduler().createTaskBuilder()
+    public SchedulerTask asyncRepeating(Runnable task, long interval, TimeUnit unit) {
+        Task t = this.scheduler.createTaskBuilder()
                 .async()
-                .delayTicks(delayTicks)
-                .execute(runnable)
-                .submit(this.plugin);
+                .interval(interval, unit)
+                .delay(interval, unit)
+                .execute(task)
+                .submit(this.bootstrap);
 
-        SchedulerTask wrapped = new SpongeSchedulerTask(task);
-        this.tasks.add(wrapped);
-        return wrapped;
-    }
-
-    @Override
-    public SchedulerTask syncLater(Runnable runnable, long delayTicks) {
-        Task task = scheduler().createTaskBuilder()
-                .delayTicks(delayTicks)
-                .execute(runnable)
-                .submit(this.plugin);
-
-        SchedulerTask wrapped = new SpongeSchedulerTask(task);
-        this.tasks.add(wrapped);
-        return wrapped;
+        this.tasks.add(t);
+        return t::cancel;
     }
 
     @Override
     public void shutdown() {
-        SafeIteration.iterate(this.tasks, SchedulerTask::cancel);
+        Iterators.iterate(this.tasks, Task::cancel);
     }
 
-    private static final class SpongeSchedulerTask implements SchedulerTask {
-        private final Task task;
-
-        private SpongeSchedulerTask(Task task) {
-            this.task = task;
-        }
-
-        @Override
-        public void cancel() {
-            this.task.cancel();
-        }
-    }
 }

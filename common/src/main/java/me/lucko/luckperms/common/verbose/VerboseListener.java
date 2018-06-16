@@ -28,16 +28,16 @@ package me.lucko.luckperms.common.verbose;
 import com.google.gson.JsonObject;
 
 import me.lucko.luckperms.api.Tristate;
-import me.lucko.luckperms.common.commands.CommandManager;
-import me.lucko.luckperms.common.commands.sender.Sender;
-import me.lucko.luckperms.common.commands.utils.CommandUtils;
-import me.lucko.luckperms.common.locale.Message;
-import me.lucko.luckperms.common.utils.DateUtil;
+import me.lucko.luckperms.common.command.CommandManager;
+import me.lucko.luckperms.common.command.utils.MessageUtils;
+import me.lucko.luckperms.common.locale.message.Message;
+import me.lucko.luckperms.common.sender.Sender;
+import me.lucko.luckperms.common.utils.DurationFormatter;
 import me.lucko.luckperms.common.utils.StackTracePrinter;
 import me.lucko.luckperms.common.utils.TextUtils;
 import me.lucko.luckperms.common.utils.gson.JArray;
 import me.lucko.luckperms.common.utils.gson.JObject;
-import me.lucko.luckperms.common.utils.web.StandardPastebin;
+import me.lucko.luckperms.common.web.StandardPastebin;
 
 import net.kyori.text.TextComponent;
 import net.kyori.text.event.HoverEvent;
@@ -149,7 +149,7 @@ public class VerboseListener {
         // build the text
         List<String> hover = new ArrayList<>();
         hover.add("&bOrigin: &2" + data.getCheckOrigin().name());
-        hover.add("&bContext: &r" + CommandUtils.contextSetToString(data.getCheckContext()));
+        hover.add("&bContext: &r" + MessageUtils.contextSetToString(data.getCheckContext()));
         hover.add("&bTrace: &r");
 
         Consumer<StackTraceElement> printer = StackTracePrinter.elementToString(str -> hover.add("&7" + str));
@@ -181,7 +181,7 @@ public class VerboseListener {
         String startDate = DATE_FORMAT.format(new Date(this.startTime));
         String endDate = DATE_FORMAT.format(new Date(now));
         long secondsTaken = (now - this.startTime) / 1000L;
-        String duration = DateUtil.formatTimeShort(secondsTaken);
+        String duration = DurationFormatter.CONCISE.format(secondsTaken);
 
         String filter;
         if (this.filter.isBlank()){
@@ -222,7 +222,7 @@ public class VerboseListener {
                 .add("data", data)
                 .toJson();
 
-        return StandardPastebin.BYTEBIN.postJson(payload).id();
+        return StandardPastebin.BYTEBIN.postJson(payload, true).id();
     }
 
     private static String getTristateColor(Tristate tristate) {

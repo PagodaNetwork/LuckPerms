@@ -26,8 +26,8 @@
 package me.lucko.luckperms.common.bulkupdate;
 
 import me.lucko.luckperms.common.bulkupdate.action.Action;
-import me.lucko.luckperms.common.bulkupdate.constraint.Constraint;
-import me.lucko.luckperms.common.node.NodeModel;
+import me.lucko.luckperms.common.bulkupdate.query.Query;
+import me.lucko.luckperms.common.node.model.NodeDataContainer;
 
 import java.util.List;
 import java.util.Objects;
@@ -45,12 +45,12 @@ public final class BulkUpdate {
     private final Action action;
 
     // a set of constraints which data must match to be acted upon
-    private final List<Constraint> constraints;
+    private final List<Query> queries;
 
-    public BulkUpdate(DataType dataType, Action action, List<Constraint> constraints) {
+    public BulkUpdate(DataType dataType, Action action, List<Query> queries) {
         this.dataType = dataType;
         this.action = action;
-        this.constraints = constraints;
+        this.queries = queries;
     }
 
     /**
@@ -59,9 +59,9 @@ public final class BulkUpdate {
      * @param node the node to check
      * @return true if satisfied
      */
-    public boolean satisfiesConstraints(NodeModel node) {
-        for (Constraint constraint : this.constraints) {
-            if (!constraint.isSatisfiedBy(node)) {
+    public boolean satisfiesConstraints(NodeDataContainer node) {
+        for (Query query : this.queries) {
+            if (!query.isSatisfiedBy(node)) {
                 return false;
             }
         }
@@ -74,7 +74,7 @@ public final class BulkUpdate {
      * @param from the node to base changes from
      * @return the new nodemodel instance, or null if the node should be deleted.
      */
-    public NodeModel apply(NodeModel from) {
+    public NodeDataContainer apply(NodeDataContainer from) {
         if (!satisfiesConstraints(from)) {
             return from; // make no change
         }
@@ -87,56 +87,35 @@ public final class BulkUpdate {
      *
      * @return this query in SQL form
      */
-    public String buildAsSql() {
+    public PreparedStatementBuilder buildAsSql() {
         // DELETE FROM {table} WHERE ...
         // UPDATE {table} SET ... WHERE ...
 
-        StringBuilder sb = new StringBuilder();
+        PreparedStatementBuilder builder = new PreparedStatementBuilder();
 
         // add the action
         // (DELETE FROM or UPDATE)
-        sb.append(this.action.getAsSql());
+        this.action.appendSql(builder);
 
         // if there are no constraints, just return without a WHERE clause
-        if (this.constraints.isEmpty()) {
-            return sb.append(";").toString();
+        if (this.queries.isEmpty()) {
+            return builder;
         }
 
         // append constraints
-        sb.append(" WHERE");
-        for (int i = 0; i < this.constraints.size(); i++) {
-            Constraint constraint = this.constraints.get(i);
+        builder.append(" WHERE");
+        for (int i = 0; i < this.queries.size(); i++) {
+            Query query = this.queries.get(i);
 
-            sb.append(" ");
+            builder.append(" ");
             if (i != 0) {
-                sb.append("AND ");
+                builder.append("AND ");
             }
 
-            sb.append(constraint.getAsSql());
+            query.appendSql(builder);
         }
 
-        return sb.append(";").toString();
-    }
-
-    /**
-     * Utility to appropriately escape a string for use in a query.
-     *
-     * @param s the string to escape
-     * @return an escaped string
-     */
-    public static String escapeStringForSql(String s) {
-        if (s.equalsIgnoreCase("true") || s.equalsIgnoreCase("false")) {
-            return s.toLowerCase();
-        }
-
-        try {
-            Integer.parseInt(s);
-            return s;
-        } catch (NumberFormatException e) {
-            // ignored
-        }
-
-        return "'" + s + "'";
+        return builder;
     }
 
     public DataType getDataType() {
@@ -147,8 +126,8 @@ public final class BulkUpdate {
         return this.action;
     }
 
-    public List<Constraint> getConstraints() {
-        return this.constraints;
+    public List<Query> getQueries() {
+        return this.queries;
     }
 
     @Override
@@ -159,12 +138,12 @@ public final class BulkUpdate {
 
         return Objects.equals(this.getDataType(), that.getDataType()) &&
                 Objects.equals(this.getAction(), that.getAction()) &&
-                Objects.equals(this.getConstraints(), that.getConstraints());
+                Objects.equals(this.getQueries(), that.getQueries());
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(getDataType(), getAction(), getConstraints());
+        return Objects.hash(getDataType(), getAction(), getQueries());
     }
 
     @Override
@@ -172,6 +151,6 @@ public final class BulkUpdate {
         return "BulkUpdate(" +
                 "dataType=" + this.getDataType() + ", " +
                 "action=" + this.getAction() + ", " +
-                "constraints=" + this.getConstraints() + ")";
+                "constraints=" + this.getQueries() + ")";
     }
 }
