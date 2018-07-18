@@ -33,7 +33,6 @@ import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
 
 import net.kyori.text.Component;
 
-import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -42,11 +41,11 @@ import java.util.UUID;
 public interface Sender {
 
     /**
-     * Gets the platform where the sender is from.
+     * Gets the plugin instance the sender is from.
      *
      * @return the plugin
      */
-    LuckPermsPlugin getPlatform();
+    LuckPermsPlugin getPlugin();
 
     /**
      * Gets the sender's username
@@ -64,7 +63,7 @@ public interface Sender {
     default String getNameWithLocation() {
         String name = getName();
 
-        ContextManager<?> contextManager = getPlatform().getContextManager();
+        ContextManager<?> contextManager = getPlugin().getContextManager();
         if (contextManager == null) {
             return name;
         }
@@ -154,16 +153,6 @@ public interface Sender {
      */
     default boolean isValid() {
         return true;
-    }
-
-    /**
-     * Gets the handle object for this sender. (In most cases, the real
-     * CommandSender/CommandSource object from the platform)
-     *
-     * @return the handle
-     */
-    default Optional<Object> getHandle() {
-        return Optional.empty();
     }
 
 }

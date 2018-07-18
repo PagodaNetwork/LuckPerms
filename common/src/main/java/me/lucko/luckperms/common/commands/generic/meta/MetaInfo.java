@@ -29,7 +29,6 @@ import com.google.common.collect.Maps;
 
 import me.lucko.luckperms.api.ChatMetaType;
 import me.lucko.luckperms.api.LocalizedNode;
-import me.lucko.luckperms.common.command.CommandManager;
 import me.lucko.luckperms.common.command.CommandResult;
 import me.lucko.luckperms.common.command.abstraction.SharedSubCommand;
 import me.lucko.luckperms.common.command.access.ArgumentPermissions;
@@ -124,12 +123,12 @@ public class MetaInfo extends SharedSubCommand {
         for (LocalizedNode m : meta) {
             String location = processLocation(m, holder);
             if (m.hasSpecificContext()) {
-                String context = MessageUtils.getAppendableNodeContextString(m);
-                TextComponent.Builder builder = TextUtils.fromLegacy(Message.META_ENTRY_WITH_CONTEXT.asString(sender.getPlatform().getLocaleManager(), m.getMeta().getKey(), m.getMeta().getValue(), location, context), CommandManager.SECTION_CHAR).toBuilder();
+                String context = MessageUtils.getAppendableNodeContextString(sender.getPlugin().getLocaleManager(), m);
+                TextComponent.Builder builder = Message.META_ENTRY_WITH_CONTEXT.asComponent(sender.getPlugin().getLocaleManager(), m.getMeta().getKey(), m.getMeta().getValue(), location, context).toBuilder();
                 builder.applyDeep(makeFancy(holder, label, m));
                 sender.sendMessage(builder.build());
             } else {
-                TextComponent.Builder builder = TextUtils.fromLegacy(Message.META_ENTRY.asString(sender.getPlatform().getLocaleManager(), m.getMeta().getKey(), m.getMeta().getValue(), location), CommandManager.SECTION_CHAR).toBuilder();
+                TextComponent.Builder builder = Message.META_ENTRY.asComponent(sender.getPlugin().getLocaleManager(), m.getMeta().getKey(), m.getMeta().getValue(), location).toBuilder();
                 builder.applyDeep(makeFancy(holder, label, m));
                 sender.sendMessage(builder.build());
             }
@@ -140,12 +139,12 @@ public class MetaInfo extends SharedSubCommand {
         for (Map.Entry<Integer, LocalizedNode> e : meta) {
             String location = processLocation(e.getValue(), holder);
             if (e.getValue().hasSpecificContext()) {
-                String context = MessageUtils.getAppendableNodeContextString(e.getValue());
-                TextComponent.Builder builder = TextUtils.fromLegacy(Message.CHAT_META_ENTRY_WITH_CONTEXT.asString(sender.getPlatform().getLocaleManager(), e.getKey(), type.getEntry(e.getValue()).getValue(), location, context), CommandManager.SECTION_CHAR).toBuilder();
+                String context = MessageUtils.getAppendableNodeContextString(sender.getPlugin().getLocaleManager(), e.getValue());
+                TextComponent.Builder builder = Message.CHAT_META_ENTRY_WITH_CONTEXT.asComponent(sender.getPlugin().getLocaleManager(), e.getKey(), type.getEntry(e.getValue()).getValue(), location, context).toBuilder();
                 builder.applyDeep(makeFancy(type, holder, label, e.getValue()));
                 sender.sendMessage(builder.build());
             } else {
-                TextComponent.Builder builder = TextUtils.fromLegacy(Message.CHAT_META_ENTRY.asString(sender.getPlatform().getLocaleManager(), e.getKey(), type.getEntry(e.getValue()).getValue(), location), CommandManager.SECTION_CHAR).toBuilder();
+                TextComponent.Builder builder = Message.CHAT_META_ENTRY.asComponent(sender.getPlugin().getLocaleManager(), e.getKey(), type.getEntry(e.getValue()).getValue(), location).toBuilder();
                 builder.applyDeep(makeFancy(type, holder, label, e.getValue()));
                 sender.sendMessage(builder.build());
             }
@@ -167,7 +166,7 @@ public class MetaInfo extends SharedSubCommand {
                 "¥7Click to remove this " + type.name().toLowerCase() + " from " + holder.getFriendlyName()
         ), '¥'));
 
-        String command = "/" + label + " " + NodeFactory.nodeAsCommand(node, holder.getType().isGroup() ? holder.getObjectName() : holder.getFriendlyName(), holder.getType(), false);
+        String command = "/" + label + " " + NodeFactory.nodeAsCommand(node, holder.getType().isGroup() ? holder.getObjectName() : holder.getFriendlyName(), holder.getType(), false, !holder.getPlugin().getConfiguration().getContextsFile().getDefaultContexts().isEmpty());
         ClickEvent clickEvent = new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, command);
 
         return component -> {
@@ -191,7 +190,7 @@ public class MetaInfo extends SharedSubCommand {
                 "¥7Click to remove this meta pair from " + holder.getFriendlyName()
         ), '¥'));
 
-        String command = "/" + label + " " + NodeFactory.nodeAsCommand(node, holder.getType().isGroup() ? holder.getObjectName() : holder.getFriendlyName(), holder.getType(), false);
+        String command = "/" + label + " " + NodeFactory.nodeAsCommand(node, holder.getType().isGroup() ? holder.getObjectName() : holder.getFriendlyName(), holder.getType(), false, !holder.getPlugin().getConfiguration().getContextsFile().getDefaultContexts().isEmpty());
         ClickEvent clickEvent = new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, command);
 
         return component -> {

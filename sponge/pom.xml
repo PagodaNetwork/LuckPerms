@@ -48,6 +48,9 @@
                                 <includes>
                                     <include>me.lucko.luckperms:luckperms-common</include>
                                     <include>me.lucko.luckperms:luckperms-api</include>
+                                    <include>me.lucko.luckperms:luckperms-sponge-service</include>
+                                    <include>me.lucko.luckperms:luckperms-sponge-service-api6</include>
+                                    <include>me.lucko.luckperms:luckperms-sponge-service-api7</include>
                                 </includes>
                             </artifactSet>
                             <relocations>
@@ -177,6 +180,22 @@
                 </exclusion>
                 <exclusion>
                     <groupId>ninja.leaping.configurate</groupId>
+                    <artifactId>configurate-yaml</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.spongepowered</groupId>
+                    <artifactId>configurate-core</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.spongepowered</groupId>
+                    <artifactId>configurate-hocon</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.spongepowered</groupId>
+                    <artifactId>configurate-gson</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.spongepowered</groupId>
                     <artifactId>configurate-yaml</artifactId>
                 </exclusion>
             </exclusions>

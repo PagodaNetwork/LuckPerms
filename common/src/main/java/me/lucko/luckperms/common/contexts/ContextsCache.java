@@ -34,12 +34,11 @@ import java.util.concurrent.TimeUnit;
 import javax.annotation.Nonnull;
 
 /**
- * Extension of {@link ContextManager} that implements an expiring lookup cache
- * per player.
+ * Implementation of {@link ContextsSupplier} that caches results.
  *
  * @param <T> the player type
  */
-public final class ContextsCache<T> extends ExpiringCache<Contexts> {
+public final class ContextsCache<T> extends ExpiringCache<Contexts> implements ContextsSupplier {
     private final T subject;
     private final ContextManager<T> contextManager;
 
@@ -55,10 +54,12 @@ public final class ContextsCache<T> extends ExpiringCache<Contexts> {
         return this.contextManager.calculate(this.subject);
     }
 
+    @Override
     public Contexts getContexts() {
         return get();
     }
 
+    @Override
     public ImmutableContextSet getContextSet() {
         // this is actually already immutable, but the Contexts method signature returns the interface.
         // using the makeImmutable method is faster than casting

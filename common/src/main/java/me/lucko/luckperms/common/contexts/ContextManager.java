@@ -25,8 +25,6 @@
 
 package me.lucko.luckperms.common.contexts;
 
-import com.github.benmanes.caffeine.cache.Caffeine;
-import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.google.common.collect.ImmutableList;
 
 import me.lucko.luckperms.api.Contexts;
@@ -61,12 +59,6 @@ public abstract class ContextManager<T> {
 
     private final List<ContextCalculator<? super T>> calculators = new CopyOnWriteArrayList<>();
     private final List<StaticContextCalculator> staticCalculators = new CopyOnWriteArrayList<>();
-
-    // caches the creation of cache instances. cache-ception.
-    // we want to encourage re-use of these instances, it's faster that way
-    private final LoadingCache<T, ContextsCache<T>> subjectCaches = Caffeine.newBuilder()
-            .weakKeys()
-            .build(key -> new ContextsCache<>(key, this));
 
     // caches static context lookups
     private final StaticLookupCache staticLookupCache = new StaticLookupCache();
@@ -129,12 +121,7 @@ public abstract class ContextManager<T> {
      * @param subject the subject
      * @return the cache
      */
-    public ContextsCache<T> getCacheFor(T subject) {
-        if (subject == null) {
-            throw new NullPointerException("subject");
-        }
-        return this.subjectCaches.get(subject);
-    }
+    public abstract ContextsSupplier getCacheFor(T subject);
 
     /**
      * Gets the contexts from the static calculators in this manager.
@@ -228,18 +215,9 @@ public abstract class ContextManager<T> {
      *
      * @param subject the subject
      */
-    public void invalidateCache(T subject) {
-        if (subject == null) {
-            throw new NullPointerException("subject");
-        }
+    public abstract void invalidateCache(T subject);
 
-        ContextsCache<T> cache = this.subjectCaches.getIfPresent(subject);
-        if (cache != null) {
-            cache.invalidate();
-        }
-    }
-
-    Contexts calculate(T subject) {
+    protected Contexts calculate(T subject) {
         MutableContextSet accumulator = MutableContextSet.create();
 
         for (ContextCalculator<? super T> calculator : ContextManager.this.calculators) {
@@ -259,7 +237,7 @@ public abstract class ContextManager<T> {
         return formContexts(subject, accumulator.makeImmutable());
     }
 
-    private Contexts calculateStatic() {
+    Contexts calculateStatic() {
         MutableContextSet accumulator = MutableContextSet.create();
 
         for (StaticContextCalculator calculator : this.staticCalculators) {

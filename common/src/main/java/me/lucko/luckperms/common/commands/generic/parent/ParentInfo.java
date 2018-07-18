@@ -112,7 +112,7 @@ public class ParentInfo extends SharedSubCommand {
 
         // send content
         for (LocalizedNode node : content) {
-            String s = "&3> &a" + node.getGroupName() + MessageUtils.getAppendableNodeContextString(node);
+            String s = "&3> &a" + node.getGroupName() + MessageUtils.getAppendableNodeContextString(plugin.getLocaleManager(), node);
             if (node.isTemporary()) {
                 s += "\n&2  expires in " + DurationFormatter.LONG.formatDateDiff(node.getExpiryUnixTime());
             }
@@ -141,7 +141,7 @@ public class ParentInfo extends SharedSubCommand {
                 "&7Click to remove this parent from " + holder.getFriendlyName()
         ), CommandManager.AMPERSAND_CHAR));
 
-        String command = "/" + label + " " + NodeFactory.nodeAsCommand(node, holder.getType().isGroup() ? holder.getObjectName() : holder.getFriendlyName(), holder.getType(), false);
+        String command = "/" + label + " " + NodeFactory.nodeAsCommand(node, holder.getType().isGroup() ? holder.getObjectName() : holder.getFriendlyName(), holder.getType(), false, !holder.getPlugin().getConfiguration().getContextsFile().getDefaultContexts().isEmpty());
         ClickEvent clickEvent = new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, command);
 
         return component -> {

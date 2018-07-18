@@ -27,6 +27,11 @@ package me.lucko.luckperms.common.locale.command;
 
 import com.google.common.collect.ImmutableList;
 
+import me.lucko.luckperms.common.locale.LocaleManager;
+import me.lucko.luckperms.common.locale.message.Message;
+
+import javax.annotation.Nullable;
+
 public class Argument {
     public static Argument create(String name, boolean required, String description) {
         return new Argument(name, required, description);
@@ -46,8 +51,8 @@ public class Argument {
         this.description = description;
     }
 
-    public String asPrettyString() {
-        return this.required ? "&8<&7" + this.name + "&8>" : "&8[&7" + this.name + "&8]";
+    public String asPrettyString(@Nullable LocaleManager localeManager) {
+        return (this.required ? Message.REQUIRED_ARGUMENT : Message.OPTIONAL_ARGUMENT).asString(localeManager, this.name);
     }
 
     public String getName() {
