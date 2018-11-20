@@ -25,10 +25,14 @@
 
 package me.lucko.luckperms.bukkit.model.dummy;
 
+import com.avaje.ebean.EbeanServer;
+import com.google.inject.Injector;
+import net.avicus.exception.ExceptionHandler;
 import org.bukkit.Server;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.event.EventRegistry;
 import org.bukkit.generator.ChunkGenerator;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.PluginDescriptionFile;
@@ -63,12 +67,16 @@ public class DummyPlugin implements Plugin {
     @Override public void saveResource(String s, boolean b) {}
     @Override public void reloadConfig() {}
     @Override public PluginLoader getPluginLoader() { return null; }
+    @Override public EventRegistry eventRegistry() { return null; }
+    @Override public Injector injector() { return null; }
     @Override public Server getServer() { return null; }
+    @Override public ExceptionHandler exceptionHandler() { return null; }
     @Override public void onDisable() {}
     @Override public void onLoad() {}
     @Override public void onEnable() {}
     @Override public boolean isNaggable() { return false; }
     @Override public void setNaggable(boolean b) {}
+    @Override public EbeanServer getDatabase() { return null; }
     @Override public ChunkGenerator getDefaultWorldGenerator(String s, String s1) { return null; }
     @Override public Logger getLogger() { return null; }
     @Override public String getName() { return null; }

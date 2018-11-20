@@ -122,21 +122,28 @@
         </dependency>
 
         <!-- Spigot -->
-        <dependency>
+        <!--<dependency>
             <groupId>org.spigotmc</groupId>
             <artifactId>spigot-api</artifactId>
             <version>1.12.2-R0.1-SNAPSHOT</version>
             <scope>provided</scope>
-        </dependency>
+        </dependency>-->
 
         <!-- Sportbukkit -->
-        <dependency>
+        <!--<dependency>
             <groupId>tc.oc</groupId>
             <artifactId>sportbukkit-api</artifactId>
             <version>1.12.2-R0.1-SNAPSHOT</version>
             <scope>provided</scope>
-        </dependency>
+        </dependency>-->
 
+        <!-- Magnet -->
+        <dependency>
+            <groupId>net.avicus</groupId>
+            <artifactId>magnet-api</artifactId>
+            <version>1.8.8-R0.1-SNAPSHOT</version>
+            <scope>provided</scope>
+        </dependency>
 
         <!-- Vault -->
         <dependency>

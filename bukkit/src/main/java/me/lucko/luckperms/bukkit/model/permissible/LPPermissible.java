@@ -337,7 +337,7 @@ public class LPPermissible extends PermissibleBase {
      * An instance of this map is injected into the super instance so these plugins continue
      * to work with LuckPerms.
      */
-    private final class FakeAttachmentList implements List<PermissionAttachment> {
+    private final class FakeAttachmentList implements Set<PermissionAttachment> {
 
         @Override
         public boolean add(PermissionAttachment attachment) {
@@ -382,7 +382,6 @@ public class LPPermissible extends PermissibleBase {
             return ImmutableList.<PermissionAttachment>copyOf(LPPermissible.this.lpAttachments).iterator();
         }
 
-        @Override
         public ListIterator<PermissionAttachment> listIterator() {
             return ImmutableList.<PermissionAttachment>copyOf(LPPermissible.this.lpAttachments).listIterator();
         }
@@ -402,16 +401,16 @@ public class LPPermissible extends PermissibleBase {
         @Override public int size() { throw new UnsupportedOperationException(); }
         @Override public boolean isEmpty() { throw new UnsupportedOperationException(); }
         @Override public boolean containsAll(@Nonnull Collection<?> c) { throw new UnsupportedOperationException(); }
-        @Override public boolean addAll(int index, @Nonnull Collection<? extends PermissionAttachment> c) { throw new UnsupportedOperationException(); }
+        public boolean addAll(int index, @Nonnull Collection<? extends PermissionAttachment> c) { throw new UnsupportedOperationException(); }
         @Override public boolean removeAll(@Nonnull Collection<?> c) { throw new UnsupportedOperationException(); }
         @Override public boolean retainAll(@Nonnull Collection<?> c) { throw new UnsupportedOperationException(); }
-        @Override public PermissionAttachment get(int index) { throw new UnsupportedOperationException(); }
-        @Override public PermissionAttachment set(int index, PermissionAttachment element) { throw new UnsupportedOperationException(); }
-        @Override public void add(int index, PermissionAttachment element) { throw new UnsupportedOperationException(); }
-        @Override public PermissionAttachment remove(int index) { throw new UnsupportedOperationException(); }
-        @Override public int indexOf(Object o) { throw new UnsupportedOperationException(); }
-        @Override public int lastIndexOf(Object o) { throw new UnsupportedOperationException(); }
-        @Nonnull @Override public ListIterator<PermissionAttachment> listIterator(int index) { throw new UnsupportedOperationException(); }
-        @Nonnull @Override public List<PermissionAttachment> subList(int fromIndex, int toIndex) { throw new UnsupportedOperationException(); }
+        public PermissionAttachment get(int index) { throw new UnsupportedOperationException(); }
+        public PermissionAttachment set(int index, PermissionAttachment element) { throw new UnsupportedOperationException(); }
+        public void add(int index, PermissionAttachment element) { throw new UnsupportedOperationException(); }
+        public PermissionAttachment remove(int index) { throw new UnsupportedOperationException(); }
+        public int indexOf(Object o) { throw new UnsupportedOperationException(); }
+        public int lastIndexOf(Object o) { throw new UnsupportedOperationException(); }
+        @Nonnull public ListIterator<PermissionAttachment> listIterator(int index) { throw new UnsupportedOperationException(); }
+        @Nonnull public List<PermissionAttachment> subList(int fromIndex, int toIndex) { throw new UnsupportedOperationException(); }
     }
 }
